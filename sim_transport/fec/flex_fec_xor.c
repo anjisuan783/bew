@@ -28,7 +28,7 @@ int flex_fec_generate(sim_segment_t* segs[], int segs_count, sim_fec_t* fec)
 		return -1;
 
 	memcpy(fec->fec_data, seg->data, seg->data_size);
-	/*补0参与运算*/
+	
 	memset(fec->fec_data + seg->data_size, 0x00, fec->fec_data_size - seg->data_size);
 
 	for (i = 1; i < segs_count; i++){
@@ -43,7 +43,6 @@ int flex_fec_generate(sim_segment_t* segs[], int segs_count, sim_fec_t* fec)
 		fec->fec_meta.total ^= seg->total;
 		fec->fec_meta.size ^= seg->data_size;
 
-		/*用0补齐,然后进行XOR运算*/
 		memset(seg->data + seg->data_size, 0x00, fec->fec_data_size - seg->data_size);
 		for (j = 0; j < fec->fec_data_size; j++)
 			fec->fec_data[j] ^= seg->data[j];
@@ -60,7 +59,7 @@ int flex_fec_recover(sim_segment_t* segs[], int segs_count, sim_fec_t* fec, sim_
 	if (segs_count <= 0)
 		return -1;
 
-	/*初始化XOR头*/
+	// init xor header
 	out_seg->packet_id = fec->fec_meta.seq;
 	out_seg->fid = fec->fec_meta.fid;
 	out_seg->timestamp = fec->fec_meta.ts;
@@ -71,7 +70,7 @@ int flex_fec_recover(sim_segment_t* segs[], int segs_count, sim_fec_t* fec, sim_
 	out_seg->data_size = fec->fec_meta.size;
 
 	memcpy(out_seg->data, fec->fec_data, fec->fec_data_size);
-	/*求值*/
+
 	for (i = 0; i < segs_count; i++){
 		seg = segs[i];
 
@@ -84,7 +83,6 @@ int flex_fec_recover(sim_segment_t* segs[], int segs_count, sim_fec_t* fec, sim_
 		out_seg->total ^= seg->total;
 		out_seg->data_size ^= seg->data_size;
 
-		/*补0参与运算*/
 		if (fec->fec_data_size < seg->data_size)
 			return -1;
 
@@ -94,7 +92,7 @@ int flex_fec_recover(sim_segment_t* segs[], int segs_count, sim_fec_t* fec, sim_
 			out_seg->data[j] ^= seg->data[j];
 	}
 
-	/*FEC是以最大包长度为基准的，data size不会大于fec_data_size*/
+	/*fec_data_size must not bigger than data_size */
 	if (out_seg->data_size > fec->fec_data_size)
 		return -1;
 

@@ -24,7 +24,7 @@ typedef struct
 	skiplist_t*		fecs;
 
 	uint16_t		cache_size;
-	sim_segment_t** cache;
+	sim_segment_t** cache;  // recover cache
 
 	uint32_t		fec_ts;
 

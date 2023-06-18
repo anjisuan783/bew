@@ -140,7 +140,7 @@ static inline int flex_fec_sender_over(flex_fec_sender_t* fec, int64_t now_ts)
 void flex_fec_sender_update(flex_fec_sender_t* fec, uint8_t protect_fraction, base_list_t* out_fecs)
 {
 	sim_fec_t* out;
-	int row, col, count, row_first;
+	int row, col;
 
 	int64_t now_ts = GET_SYS_MS();
 
@@ -151,13 +151,16 @@ void flex_fec_sender_update(flex_fec_sender_t* fec, uint8_t protect_fraction, ba
 	int rc = flex_fec_sender_num_packets(fec, protect_fraction);
 
 	if (fec->col > 1){
+		int count; // segment number for processing once
+		int row_first; // first segment index of a row
+
 		/*row FEC packet
 		-------------------------------------------
 		| 1 | 2 | 3 | 4 | 5 | R0 = xor(1,2,3,4,5) |
 		-------------------------------------------
 		| 6 | 7 | 8 | 9 | 10| R1 = xor(6,7,8,9,10)|
 		-------------------------------------------
-		*/
+		*/ 
 		for (row = 0; row < fec->row; row++){
 			count = fec->col;
 			row_first = row * fec->col;
@@ -192,6 +195,7 @@ void flex_fec_sender_update(flex_fec_sender_t* fec, uint8_t protect_fraction, ba
 		----------------------
 		*/
 		if (fec->row > 1 && rc == 1){
+			// adjust cache
 			if (fec->cache_size < fec->row){
 				while (fec->cache_size < fec->row)
 					fec->cache_size += DEFAULT_SIZE;
@@ -200,6 +204,8 @@ void flex_fec_sender_update(flex_fec_sender_t* fec, uint8_t protect_fraction, ba
 
 			for (col = 0; col < fec->col; col++){
 				count = 0;
+
+				// build row vector from column vector for making flex_fec_generate happy
 				for (row = 0; row < fec->row; row++){
 					row_first = row * fec->col + col;
 					if (row_first < fec->segs_count)
@@ -228,6 +234,7 @@ void flex_fec_sender_update(flex_fec_sender_t* fec, uint8_t protect_fraction, ba
 		}
 	}
 
+	// init fec parament for next time
 	fec->fec_ts = 0;
 	fec->segs_count = 0;
 	fec->base_id = 0;

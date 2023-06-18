@@ -155,8 +155,9 @@ typedef struct
 	uint16_t		fec_id;					/*fec id, auto increase */
 	uint8_t			row;					
 	uint8_t			col;					
-	uint8_t			index;					/* internal index, for recover packet */
-	uint16_t		count;					/* packet number of a matrix */
+	uint8_t			index;					/* row number or column index of fec spare maxtrix 
+																 0x80 & index = 0 mean this is row index*/
+	uint16_t		count;					/* packet number of a meta matrix */
 	uint32_t		base_id;				/* begin id */
 
 	uint32_t	send_ts;					

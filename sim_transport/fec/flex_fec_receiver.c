@@ -95,7 +95,7 @@ int flex_fec_receiver_full(flex_fec_receiver_t* r)
 		return -1;
 }
 
-/*恢复横向丢失的包X
+/*
 ----------------------------------------------
 | 1 | 2 | 3 | X | 5 | R0 | X = xor(1,2,3,5,R0)
 ----------------------------------------------
@@ -104,33 +104,29 @@ int flex_fec_receiver_full(flex_fec_receiver_t* r)
 */
 static sim_segment_t* flex_recover_row(flex_fec_receiver_t* r, uint8_t row)
 {
-	sim_segment_t* seg;
-	int count, i, loss;
+	sim_segment_t* seg = NULL;
+	int count = 0, loss = 0;
 	skiplist_item_t key;
 	skiplist_iter_t* iter;
 
-	seg = NULL;
-	count = 0;
-	loss = 0;
-
+	// received all segments
 	if (skiplist_size(r->segs) >= r->count)
 		return seg;
 
 	/*拼凑基于row的恢复信息，并判断是否丢包*/
-	for (i = 0; i < r->col; ++i){
+	for (int i = 0; i < r->col; ++i){
 		key.u32 = row * r->col + i + r->base_id;
 		if (key.u32 >= r->base_id + r->count)
 			break;
 
 		iter = skiplist_search(r->segs, key);
-		if (iter != NULL){
-			r->cache[count++] = iter->val.ptr;
+		if (iter == NULL){
+			++loss; continue;
 		}
-		else
-			loss++;
+		r->cache[count++] = iter->val.ptr;
 	}
 
-	/*FEC无法恢复*/
+	// can't recover
 	if (loss != 1 || count == 0)
 		return seg;
 
@@ -149,7 +145,7 @@ static sim_segment_t* flex_recover_row(flex_fec_receiver_t* r, uint8_t row)
 	return seg;
 }
 
-/*恢复纵向丢失的包X
+/*
 ----------------------
 | 1 | 2 | 3 | 4 | 5  |
 ----------------------
@@ -161,32 +157,28 @@ X = xor(4, C4)
 */
 static sim_segment_t* flex_recover_col(flex_fec_receiver_t* r, uint8_t col)
 {
-	sim_segment_t* seg;
-	int count, i, loss;
+	sim_segment_t* seg = NULL;
+	int count = 0, loss = 0;
 	skiplist_item_t key;
-	skiplist_iter_t* iter;
 
-	seg = NULL;
-	count = 0;
-	loss = 0;
-
+	// received all segments
 	if (skiplist_size(r->segs) >= r->count)
 		return seg;
 
+	skiplist_iter_t* iter;
 	/*拼凑基于colum的恢复信息，并判断是否丢包*/
-	for (i = 0; i < r->row; ++i){
+	for (int i = 0; i < r->row; ++i){
 		key.u32 = i * r->col + col + r->base_id;
 		if (key.u32 >= r->base_id + r->count)
 			break;
 
 		iter = skiplist_search(r->segs, key);
-		if (iter != NULL){
-			r->cache[count++] = iter->val.ptr;
+		if (iter == NULL){
+			loss++; continue;
 		}
-		else
-			loss++;
+		r->cache[count++] = iter->val.ptr;
 	}
-	/*FEC无法恢复*/
+	/*FEC can't recover*/
 	if (loss != 1 || count == 0)
 		return seg;
 
@@ -242,30 +234,26 @@ err:
 
 int flex_fec_receiver_on_segment(flex_fec_receiver_t* r, sim_segment_t* seg, base_list_t* out)
 {
-	sim_segment_t* recover;
-	skiplist_item_t key, val;
-
-	uint8_t row, col;
-
-	recover = NULL;
-
 	if (r->inited == 0 || seg == NULL)
-		goto err;
+		return -1;
 
 	if (r->col < 2 || r->row == 0 || r->count == 0 || seg->packet_id < r->base_id)
-		goto err;
+		return -1;
+
+	skiplist_item_t key, val;
 
 	key.u32 = seg->packet_id;
+	// duplicated segment
 	if (skiplist_search(r->segs, key) != NULL)
-		goto err;
+		return -1;
 
 	val.ptr = seg;
 	skiplist_insert(r->segs, key, val);
 
-	col = (seg->packet_id - r->base_id) % r->col;
-	row = (seg->packet_id - r->base_id) / r->col;
+	uint8_t col = (seg->packet_id - r->base_id) % r->col;
+	uint8_t row = (seg->packet_id - r->base_id) / r->col;
 
-	recover = flex_recover_row(r, row);
+	sim_segment_t* recover = flex_recover_row(r, row);
 	if (recover != NULL)
 		list_push(out, recover);
 
@@ -274,8 +262,5 @@ int flex_fec_receiver_on_segment(flex_fec_receiver_t* r, sim_segment_t* seg, bas
 		list_push(out, recover);
 
 	return 0;
-
-err:
-	return -1;
 }
 
