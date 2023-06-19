@@ -77,7 +77,7 @@ typedef sim_connect_ack_t sim_disconnect_ack_t;
 
 typedef struct
 {
-	uint32_t	packet_id;		/*package id*/
+	uint32_t	packet_id;		/*package id   key of sim_sender_t->ack_cache */
 	uint32_t	fid;					/*frame id*/
 	uint32_t	timestamp;			
 	uint16_t	index;					/*segment id of a frame*/
@@ -90,10 +90,10 @@ typedef struct
 	uint16_t	send_ts;				/* send timestamp */
 	uint16_t	transport_seq;	/* sequence */
 	
-	uint32_t	send_id;
+	uint32_t	send_id;        /* key of sim_sender_t->segs_cache */
 
-	uint16_t	data_size;
-	uint8_t		data[SIM_VIDEO_SIZE];
+	uint16_t	data_size;      /* segment meta length */
+	uint8_t		data[SIM_VIDEO_SIZE]; /* segment meta data */
 }sim_segment_t;
 
 #define SIM_SEGMENT_HEADER_SIZE (SIM_HEADER_SIZE + 24)

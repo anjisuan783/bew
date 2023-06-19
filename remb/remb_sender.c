@@ -10,7 +10,7 @@
 
 static void sender_remb_on_change_bitrate(remb_sender_t* cc, uint32_t bitrate, uint8_t fraction_loss, uint32_t rtt)
 {
-	razor_info("remb sender change bitrate, bitrate = %uKB/s\n", bitrate / 8000);
+	//razor_info("remb sender change bitrate, bitrate = %uKB/s\n", bitrate / 8000);
 
 	bbr_pacer_set_estimate_bitrate(cc->pacer, bitrate);
 	bbr_pacer_set_padding_rate(cc->pacer, bitrate / 1000);

@@ -93,7 +93,7 @@ void sender_estimation_update_remb(sender_estimation_t* est, int64_t cur_ts, uin
 
 void sender_estimation_update_delay_base(sender_estimation_t* est, int64_t cur_ts, uint32_t bitrate, int state)
 {
-	razor_debug("sender_estimation_update_delay_base, bitrate = %u\n", bitrate);
+	//razor_debug("sender_estimation_update_delay_base, bitrate = %u\n", bitrate);
 	est->delay_base_bitrate = bitrate;
 	est->state = state;
 	cap_bitrate_to_threshold(est, cur_ts, est->curr_bitrate);

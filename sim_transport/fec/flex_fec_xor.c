@@ -19,6 +19,7 @@ int flex_fec_generate(sim_segment_t* segs[], int segs_count, sim_fec_t* fec)
 	fec->fec_meta.total = seg->total;
 	fec->fec_meta.size = seg->data_size;
 
+	// get max data_size
 	fec->fec_data_size = 0;
 	for (i = 0; i < segs_count; i++) {
 		if (fec->fec_data_size < segs[i]->data_size)

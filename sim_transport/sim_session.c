@@ -642,7 +642,7 @@ static void sim_session_process(sim_session_t* s, bin_stream_t* strm, su_addr* a
 
 static void sim_session_send_ping(sim_session_t* s, int64_t now_ts)
 {
-	sim_info("sim_session_send_ping\n");
+	//sim_info("sim_session_send_ping\n");
 	sim_header_t header;
 	sim_ping_t body;
 

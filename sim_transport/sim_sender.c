@@ -43,26 +43,21 @@ static void sim_bitrate_change(void* trigger, uint32_t bitrate, uint8_t fraction
 	/*sim_info("loss = %f, bitrate = %u, video_bitrate_kbps = %u\n", loss, bitrate, video_bitrate_kbps);*/
 	s->change_bitrate_cb(s->event, video_bitrate_kbps, loss > 0 ? 1 : 0);
 
-	sim_debug("bitrate = %ukb/s, video_bitrate_kbps = %uknb/s\n", bitrate / 8000, video_bitrate_kbps / 8);
+	sim_debug("bitrate = %ukb/s, video_bitrate_kbps = %ukb/s lost = %f fraction_loss=%u\n", bitrate / 8000, video_bitrate_kbps / 8, loss * 100, fraction_loss);
 }
 
 static void sim_send_packet(void* handler, uint32_t send_id, int fec, size_t size, int padding)
 {
 	sim_header_t header;
-	sim_segment_t* seg;
-	sim_fec_t* fec_packet;
-
 	skiplist_iter_t* it;
 	skiplist_item_t key;
-	int64_t now_ts;
 
 	sim_sender_t* sender = (sim_sender_t*)handler;
 	sim_session_t* s = sender->s;
-	sim_pad_t pad;
-
-	now_ts = GET_SYS_MS();
+	int64_t now_ts = GET_SYS_MS();
 
 	if (padding == 1){
+		sim_pad_t pad;
 		pad.transport_seq = sender->transport_seq_seed++;
 		pad.send_ts = (uint32_t)(now_ts - sender->first_ts);
 		pad.data_size = SU_MIN(size, SIM_VIDEO_SIZE);
@@ -77,8 +72,7 @@ static void sim_send_packet(void* handler, uint32_t send_id, int fec, size_t siz
 
 		if(s->loss_fraction == 0)
 			s->loss_fraction = 1;
-	}
-	else if (fec == 0){
+	} else if (fec == 0){
 		key.u32 = send_id;
 		it = skiplist_search(sender->segs_cache, key);
 		if (it == NULL){
@@ -86,7 +80,7 @@ static void sim_send_packet(void* handler, uint32_t send_id, int fec, size_t siz
 			return;
 		}
 
-		seg = it->val.ptr;
+		sim_segment_t* seg = it->val.ptr;
 		seg->transport_seq = sender->transport_seq_seed++;
 		seg->send_ts = (uint16_t)(now_ts - sender->first_ts - seg->timestamp);
 
@@ -99,16 +93,14 @@ static void sim_send_packet(void* handler, uint32_t send_id, int fec, size_t siz
 		sim_session_network_send(s, &s->sstrm);
 
 		/*sim_debug("send packet id = %u, transport_seq = %u\n", packet_id, sender->transport_seq_seed - 1);*/
-	}
-	else if (fec == 1){
+	} else if (fec == 1){
 		key.u32 = send_id;
 		it = skiplist_search(sender->fecs_cache, key);
 		if (it == NULL){
 			sim_debug("send fec to network failed, send_id = %u\n", send_id);
 			return;
 		}
-
-		fec_packet = it->val.ptr;
+		sim_fec_t* fec_packet = it->val.ptr;
 		fec_packet->transport_seq = sender->transport_seq_seed++;
 		fec_packet->send_ts = (uint32_t)(now_ts - sender->first_ts);
 
@@ -285,11 +277,13 @@ static uint16_t sim_split_frame(sim_session_t* s, sim_sender_t* sender, size_t s
 
 static void sim_sender_fec(sim_session_t* s, sim_sender_t* sender)
 {
+	flex_fec_sender_update(sender->flex, s->loss_fraction, sender->out_fecs);
+	if (s->loss_fraction && list_size(sender->out_fecs) == 0) {
+		sim_info("sim_sender_fec loss_fraction=%d, fec num=%d, meta count=%d, row=%d, col=%d\n", 
+			(int)s->loss_fraction, (int)list_size(sender->out_fecs), (int)sender->flex->segs_count, sender->flex->row, sender->flex->col);
+	}
 	skiplist_item_t key, val;
 	sim_fec_t* fec;
-
-	flex_fec_sender_update(sender->flex, s->loss_fraction, sender->out_fecs);
-
 	while (list_size(sender->out_fecs) > 0){
 		fec = list_pop(sender->out_fecs);
 		if (fec != NULL){
@@ -304,35 +298,29 @@ static void sim_sender_fec(sim_session_t* s, sim_sender_t* sender)
 }
 
 int sim_sender_put(sim_session_t* s, sim_sender_t* sender, uint8_t payload_type, uint8_t ftype, const uint8_t* data, size_t size)
-{
-	sim_segment_t* seg;
-	int64_t now_ts;
-	uint16_t total, i;
-	uint8_t* pos;
-	skiplist_item_t key, val;
-	uint32_t timestamp;
-	int segment_size;
-
+{	
 	if (sender->cc == NULL)
 		return -1;
 
-	if (ftype == 1)
-		sim_debug("sender put video frame, data size = %d\n", size);
-	now_ts = GET_SYS_MS();
+	//if (ftype == 1)
+	//	sim_debug("sender put video frame, data size = %d\n", size);
+	int64_t now_ts = GET_SYS_MS();
 
-	segment_size = SIM_VIDEO_SIZE;
-	total = sim_split_frame(s, sender, size, segment_size);
+	int segment_size = SIM_VIDEO_SIZE;
+	uint16_t total = sim_split_frame(s, sender, size, segment_size);
 
+	uint32_t timestamp;
 	if (sender->first_ts == -1){
 		timestamp = 0;
 		sender->first_ts = now_ts;
-	}
-	else
+	} else {
 		timestamp = (uint32_t)(now_ts - sender->first_ts);
+	}
 
-	pos = (uint8_t*)data;
+	uint8_t* pos = (uint8_t*)data;
 	++sender->frame_id_seed;
-	for (i = 0; i < total; ++i){
+	sim_segment_t* seg;
+	for (uint16_t i = 0; i < total; ++i){
 		seg = malloc(sizeof(sim_segment_t));
 
 		seg->packet_id = ++sender->packet_id_seed;
@@ -358,6 +346,7 @@ int sim_sender_put(sim_session_t* s, sim_sender_t* sender, uint8_t payload_type,
 			flex_fec_sender_add_segment(sender->flex, seg);
 		}
 
+	  skiplist_item_t key, val;
 		key.u32 = seg->send_id;
 		val.ptr = seg;
 		skiplist_insert(sender->segs_cache, key, val);

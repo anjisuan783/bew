@@ -113,20 +113,18 @@ static const char* get_file_name(const char* pathname)
 #define DATE_STR_SIZE 64
 int log_win_write(int level, const char* file, int line, const char* fmt, va_list vl)
 {
-	//char date_str[DATE_STR_SIZE];
 	char str_log[1024] = {0x00};
+	
 	if (log_file != NULL && log_file->fp != NULL){
 		su_mutex_lock(log_file->mutex);
 		snprintf(str_log, 1023, "%s %s:%d ", get_time_str(str_log), get_file_name(file), line);
-		snprintf(str_log + strlen(str_log) , 1023 - strlen(str_log), fmt, vl);
-		fprintf(log_file->fp, "%s",str_log);
-		//vfprintf(log_file->fp, fmt, vl);
-		//snprintf(str_log , 1023, fmt, vl);
+		_vsnprintf(str_log + strlen(str_log), 1023 - strlen(str_log), fmt, vl);
+		fprintf(log_file->fp, "%s", str_log);
 		OutputDebugStringA(str_log);
 		su_mutex_unlock(log_file->mutex);
 		fflush(log_file->fp);
 	}
-
+	
 	return 0;
 }
 

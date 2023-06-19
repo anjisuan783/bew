@@ -11,24 +11,24 @@
 #include "cf_skiplist.h"
 #include "cf_list.h"
 
-#define k_max_pace_queue_ms			250			/*pacer queue缓冲的最大延迟*/
+#define k_max_pace_queue_ms			250			/*pacer queue max delay*/
 
 typedef struct
 {
-	uint32_t		seq;			/*通信中的绝对seq，相当于帧的先后顺序，webRTC这块做的非常复杂，做了优先等级，对于视频来说，绝对的SEQ大小表明了先后关系，没有必要做各种等级区分*/
-	int				retrans;		/*是否是重传*/
-	size_t			size;			/*报文大小*/
-	int64_t			que_ts;			/*放入pacer queue的时间戳*/
-	int				sent;			/*是否已经发送*/
+	uint32_t		seq;			/*packet sequence id*/
+	int				retrans;		/*retransmition*/
+	size_t			size;			/*packet size*/
+	int64_t			que_ts;			/*timestamp when put into pacer queue*/
+	int				sent;			/*sent flag*/
 }packet_event_t;
 
 typedef struct
 {
-	uint32_t		max_que_ms;		/*pacer可以接受最大的延迟*/
+	uint32_t		max_que_ms;		/*pacer max delay*/
 	size_t			total_size;
-	int64_t			oldest_ts;		/*最早帧的时间戳*/
-	skiplist_t*		cache;			/*按绝对SEQ排队的队列*/
-	base_list_t*	l;				/*按时间先后的队列*/
+	int64_t			oldest_ts;		/*oldest timestamp*/
+	skiplist_t*		cache;			/*ordered by sequence id*/
+	base_list_t*	l;				/*time ordered list*/
 }pacer_queue_t;
 
 void					pacer_queue_init(pacer_queue_t* que, uint32_t que_ms);

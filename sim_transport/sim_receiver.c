@@ -235,7 +235,7 @@ static int real_video_cache_put(sim_session_t* s, sim_frame_cache_t* c, sim_segm
 		c->max_fid = seg->fid;
 	}
 
-	sim_debug("buffer put video frame, frame = %u, packet_id = %u\n", seg->fid, seg->packet_id);
+	//sim_debug("buffer put video frame, frame = %u, packet_id = %u\n", seg->fid, seg->packet_id);
 
 	frame = &(c->frames[INDEX(seg->fid)]);
 	frame->fid = seg->fid;
@@ -795,7 +795,7 @@ static void sim_receiver_recover(sim_session_t* s, sim_receiver_t* r)
 		skiplist_remove(recover_map, iter->key);
 
 		if (sim_receiver_internal_put(s, r, in_seg) == 0){
-			sim_debug("fec recover video segment, packet id = %u\n", in_seg->packet_id);
+			//sim_debug("fec recover video segment, packet id = %u\n", in_seg->packet_id);
 			sim_fec_put_segment(s, r->recover, in_seg); /*将恢复的包插入到FEC继续恢复其他报文*/
 		}
 		else

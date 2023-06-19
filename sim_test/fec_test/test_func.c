@@ -70,23 +70,23 @@ free_segments:
 	}
 }
 
-static const int segments_num[10] = {1, 5, 7, 15, 20, 36, 41, 50, 72, 122};
+static const uint16_t segments_num[10] = {1, 5, 6, 15, 20, 36, 41, 50, 72, 122};
+static const uint8_t protection_fact[13] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 52, 128, 255};
 void test_num_fec()
 {
 	flex_fec_sender_t fec;
 	fec.col = 0;
 	fec.row = 0;
 
-	for (int i = 0; i < 10; i++){
-		fec.segs_count = segments_num[i];
-		flex_fec_sender_num_packets(&fec, 80);
+	int rc = 0;
 
-		printf("No.%d num = %d, col = %d, row = %d\n", i, fec.segs_count, fec.col, fec.row);
-	}
-	for (int i = 0; i < 10; i++) {
+	for (int i = 0; i < sizeof(segments_num)/sizeof(uint16_t); ++i) {
+		printf("case %d segment cout = %d \n", i+1, segments_num[i]);
 		fec.segs_count = segments_num[i];
-		flex_fec_sender_num_packets(&fec, 0);
-		printf("No.%d num = %d, col = %d, row = %d\n", i, fec.segs_count, fec.col, fec.row);
+		for (int j = 0; j < sizeof(protection_fact); ++j) {
+			rc = flex_fec_sender_num_packets(&fec, protection_fact[j]);
+			printf("proctection=%d, col=%d, row=%d %s\n", protection_fact[j], fec.col, fec.row, rc?"fec on":"fec off");
+		}
 	}
 }
 

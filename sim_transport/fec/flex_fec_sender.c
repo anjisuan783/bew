@@ -1,5 +1,6 @@
 #include "flex_fec_sender.h"
 #include <math.h>
+#include "sim_internal.h"
 
 #define DEFAULT_SIZE 32
 #define FEC_REPAIR_WINDOW 500
@@ -80,7 +81,7 @@ void flex_fec_sender_add_segment(flex_fec_sender_t* fec, sim_segment_t* seg)
 
 int flex_fec_sender_num_packets(flex_fec_sender_t* fec, const uint8_t protect_fraction)
 {
-	int colum, ret = 0;
+	int ret = 0;
 	fec->col = 0;
 	fec->row = 0;
 	// parameter check
@@ -88,7 +89,8 @@ int flex_fec_sender_num_packets(flex_fec_sender_t* fec, const uint8_t protect_fr
 		return ret;
 	}
 
-	// matix
+	int colum = 0;
+	// matrix
 	if (protect_fraction >= FEC_LOSS_THROLD && fec->segs_count >= 6){
 		double f = sqrt(fec->segs_count);
 		colum = (int)f;
@@ -111,13 +113,13 @@ int flex_fec_sender_num_packets(flex_fec_sender_t* fec, const uint8_t protect_fr
 		ret = 1;
 		return ret;
 	}
-	// row only
+	// protect_fraction < FEC_LOSS_THROLD || fec->segs_count < 6
 	colum = (fec->segs_count * protect_fraction + (1 << 7)) >> 8;
 	fec->row = 1;
 
-	if (colum == 0)
-		fec->col = fec->segs_count;
-	else{
+	if (colum == 0) {
+		fec->col = (uint8_t)fec->segs_count;
+	} else {
 		fec->col = fec->segs_count / colum;
 		if (fec->segs_count % colum > 0)
 			fec->col += 1;
@@ -125,26 +127,32 @@ int flex_fec_sender_num_packets(flex_fec_sender_t* fec, const uint8_t protect_fr
 		fec->row = fec->segs_count / fec->col;
 		if ((fec->segs_count % fec->col) != 0)
 			fec->row += 1;
+
+		if (fec->row > 1) {
+			ret = 1;
+		}
 	}
+
 	return ret;
 }
 
 static inline int flex_fec_sender_over(flex_fec_sender_t* fec, int64_t now_ts)
 {
-	if (fec->fec_ts + FEC_REPAIR_WINDOW < now_ts || fec->segs_count >= 6)
+	if (fec->fec_ts + FEC_REPAIR_WINDOW < now_ts || fec->segs_count >= 6) {
 		return 0;
-	return -1;
+	}
+	return 1;
 }
 
 /* fec on a completed frame */
-void flex_fec_sender_update(flex_fec_sender_t* fec, uint8_t protect_fraction, base_list_t* out_fecs)
+void flex_fec_sender_update(flex_fec_sender_t* fec, const uint8_t protect_fraction, base_list_t* out_fecs)
 {
 	sim_fec_t* out;
 	int row, col;
 
 	int64_t now_ts = GET_SYS_MS();
 
-	if (flex_fec_sender_over(fec, now_ts) != 0){
+	if (flex_fec_sender_over(fec, now_ts)){
 		return ;
 	}
 

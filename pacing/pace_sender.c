@@ -8,8 +8,8 @@
 #include "pace_sender.h"
 #include "razor_log.h"
 
-#define k_min_packet_limit_ms		5			/*发包最小间隔*/
-#define k_max_interval_ms			50			/*发包最大时间差，长时间不发送报文一次发送很多数据出去造成网络风暴*/
+#define k_min_packet_limit_ms		5			/*min time diff of two packet sending*/
+#define k_max_interval_ms			50			/*max time diff of two packet sending*/
 #define k_default_pace_factor		3
 #define k_min_pacing_bitrate		(50 * 1000 * 8)
 
@@ -52,10 +52,9 @@ void pace_set_estimate_bitrate(pace_sender_t* pace, uint32_t bitrate_bps)
 	pace->pacing_bitrate_kpbs = SU_MAX(bitrate_bps / 1000, pace->min_sender_bitrate_kpbs) * k_default_pace_factor;
 	alr_detector_set_bitrate(pace->alr, bitrate_bps);
 
-	razor_debug("set pacer bitrate, bitrate = %ubps\n", bitrate_bps);
+	//razor_debug("set pacer bitrate, bitrate = %ubps\n", bitrate_bps);
 }
 
-/*设置最小带宽限制*/
 void pace_set_bitrate_limits(pace_sender_t* pace, uint32_t min_sent_bitrate_pbs)
 {
 	pace->min_sender_bitrate_kpbs = k_min_pacing_bitrate / 1000;
@@ -64,7 +63,6 @@ void pace_set_bitrate_limits(pace_sender_t* pace, uint32_t min_sent_bitrate_pbs)
 	razor_info("set pacer min bitrate, bitrate = %ubps\n", min_sent_bitrate_pbs);
 }
 
-/*将一个即将要发送的报文放入排队队列中*/
 int pace_insert_packet(pace_sender_t* pace, uint32_t seq, int retrans, size_t size, int64_t now_ts)
 {
 	packet_event_t ev;
@@ -101,11 +99,10 @@ int64_t pace_get_limited_start_time(pace_sender_t* pace)
 
 static int pace_send(pace_sender_t* pace, packet_event_t* ev)
 {
-	/*进行发送控制*/
+	/* send control */
 	if (budget_remaining(&pace->media_budget) == 0)
 		return -1;
 
-	/*调用外部接口进行数据发送*/
 	if (pace->send_cb != NULL)
 		pace->send_cb(pace->handler, ev->seq, ev->retrans, ev->size, 0);
 
@@ -128,7 +125,7 @@ void pace_try_transmit(pace_sender_t* pace, int64_t now_ts)
 
 	elapsed_ms = SU_MIN(elapsed_ms, k_max_interval_ms);
 	
-	/*计算media budget中需要的码率,并更新到media budget之中*/
+	/*calculate bitrate for media budget, then update to media budget*/
 	if (pacer_queue_bytes(&pace->que) > 0){
 		target_bitrate_kbps = pacer_queue_target_bitrate_kbps(&pace->que, now_ts);
 		target_bitrate_kbps = SU_MAX(pace->pacing_bitrate_kpbs, target_bitrate_kbps);
@@ -139,7 +136,7 @@ void pace_try_transmit(pace_sender_t* pace, int64_t now_ts)
 	set_target_rate_kbps(&pace->media_budget, target_bitrate_kbps);
 	increase_budget(&pace->media_budget, elapsed_ms);
 
-	/*进行发包*/
+	/*send packets*/
 	sent_bytes = 0;
 	while (pacer_queue_empty(&pace->que) != 0){
 		ev = pacer_queue_front(&pace->que);

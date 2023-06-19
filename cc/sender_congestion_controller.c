@@ -17,10 +17,10 @@ static void sender_cc_on_change_bitrate(void* handler, uint32_t bitrate, uint8_t
 {
 	sender_cc_t* cc = (sender_cc_t*)handler;
 
-	razor_info("sender change bitrate, bitrate = %ubps\n", bitrate);
+	//razor_info("sender change bitrate, bitrate = %ubps\n", bitrate);
 
 	pace_set_estimate_bitrate(cc->pacer, bitrate);
-	/*触发一个通信层通知*/
+	/*rigger a notification to transport layer*/
 	if (cc->trigger != NULL && cc->trigger_cb != NULL)
 		cc->trigger_cb(cc->trigger, bitrate, fraction_loss, rtt);
 }
@@ -92,10 +92,7 @@ void sender_cc_destroy(sender_cc_t* cc)
 void sender_cc_heartbeat(sender_cc_t* cc)
 {
 	int64_t now_ts = GET_SYS_MS();
-	/*进行pace发送*/
 	pace_try_transmit(cc->pacer, now_ts);
-
-	/*进行带宽调节*/
 	bitrate_controller_heartbeat(cc->bitrate_controller, now_ts, ack_estimator_bitrate_bps(cc->ack));
 }
 
@@ -107,8 +104,6 @@ int sender_cc_add_pace_packet(sender_cc_t* cc, uint32_t packet_id, int retrans, 
 void sender_on_send_packet(sender_cc_t* cc, uint16_t seq, size_t size)
 {
 	cc_feedback_add_packet(&cc->adapter, seq, size);
-
-	/*todo:进行RTT周期内是否发送码率溢出，可以不实现*/
 }
 
 void sender_on_feedback(sender_cc_t* cc, uint8_t* feedback, int feedback_size)
@@ -126,12 +121,11 @@ void sender_on_feedback(sender_cc_t* cc, uint8_t* feedback, int feedback_size)
 	memcpy(cc->strm.data, feedback, feedback_size);
 	cc->strm.used = feedback_size;
 
-	/*解码得到反馈序列*/
 	feedback_msg_decode(&cc->strm, &msg);
 
 	now_ts = GET_SYS_MS();
 
-	/*处理proxy estimate的信息*/
+	/*proxy estimate processing*/
 	if ((msg.flag & proxy_ts_msg) == proxy_ts_msg){
 		if (cc_feedback_on_feedback(&cc->adapter, &msg, now_ts) <= 0)
 			return;
@@ -142,25 +136,25 @@ void sender_on_feedback(sender_cc_t* cc, uint8_t* feedback, int feedback_size)
 		}
 		cc->was_in_alr = cur_alr;
 
-		/*进行远端接收码率评估*/
+		/*remote bwe*/
 		ack_estimator_incoming(cc->ack, cc->adapter.packets, cc->adapter.num);
 
-		/*根据延迟状态进行发送端拥塞控制判断,并评估最新的发送码率*/
+		// delay based bwe
 		init_bwe_result_null(bwe_result);
 		bwe_result = delay_bwe_incoming(cc->bwe, cc->adapter.packets, cc->adapter.num, ack_estimator_bitrate_bps(cc->ack), now_ts);
 
-		/*进行码率调节*/
+		/*bitrate adaptation*/
 		if (bwe_result.updated == 0)
 			bitrate_controller_on_basedelay_result(cc->bitrate_controller, bwe_result.updated, bwe_result.probe, bwe_result.bitrate, cc->bwe->detector->state);
 	}
-	/*处理remb*/
+	/*remb processing*/
 	if ((msg.flag & remb_msg) == remb_msg){
 		razor_debug("sender remb = %ubps\n", msg.remb);
 		bitrate_controller_on_remb(cc->bitrate_controller, msg.remb);
 	}
-	/*处理loss info*/
+	/*loss info processing*/
 	if ((msg.flag & loss_info_msg) == loss_info_msg){
-		razor_debug("sender receive loss info, fraction_loss = %u, packets_num = %u\n", msg.fraction_loss, msg.packet_num);
+		//razor_debug("sender receive loss info, fraction_loss = %u, packets_num = %u\n", msg.fraction_loss, msg.packet_num);
 		bitrate_controller_on_report(cc->bitrate_controller, cc->rtt, now_ts, msg.fraction_loss, msg.packet_num, ack_estimator_bitrate_bps(cc->ack));
 	}
 }
@@ -184,7 +178,7 @@ void sender_cc_set_bitrates(sender_cc_t* cc, uint32_t min_bitrate, uint32_t star
 
 	bitrate_controller_set_bitrates(cc->bitrate_controller, start_bitrate, min_bitrate, max_bitrate);
 
-	/*pace是用BYTE计算*/
+	/*pace using BYTE*/
 	pace_set_bitrate_limits(cc->pacer, min_bitrate);
 	pace_set_estimate_bitrate(cc->pacer, start_bitrate);
 

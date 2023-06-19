@@ -206,7 +206,7 @@ static uint32_t aimd_change_bitrate(aimd_rate_controller_t* aimd, uint32_t new_b
 			new_bitrate += multiplicative_rate_increase(cur_ts, aimd->time_last_bitrate_change, new_bitrate);
 
 		aimd->time_last_bitrate_change = cur_ts;
-		razor_debug("aimd: kRcIncrease, new bitrate = %u, input->incoming_bitrate = %u, curr_bitrate = %u\n", new_bitrate, input->incoming_bitrate, aimd->curr_rate);
+		//razor_debug("aimd: kRcIncrease, new bitrate = %u, input->incoming_bitrate = %u, curr_bitrate = %u\n", new_bitrate, input->incoming_bitrate, aimd->curr_rate);
 
 		break;
 
