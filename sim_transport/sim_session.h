@@ -12,41 +12,42 @@ struct __sim_session
 
 	uint32_t		scid;				/*sender call id*/
 	uint32_t		rcid;				/*receiver call id*/
-	uint32_t		uid;				/*本端用户ID*/
+	uint32_t		uid;				/*local user ID*/
 
-	uint32_t		rtt;				/*rtt值*/
-	uint32_t		rtt_var;			/*rtt误差修正值*/
-	uint8_t			loss_fraction;		/*丢包率, 0 ~ 255之间的数，100% = 255*/
+	uint32_t		rtt;				/*rtt*/
+	uint32_t		rtt_var;			/*rtt error correct value*/
+	uint8_t			loss_fraction;		/*lost rate, 0 ~ 255, 100% = 255*/
 	uint32_t		fir_seq;
 
-	int				state;				/*状态*/
-	int				interrupt;			/*中断*/
+	int				state;				
+	int				interrupt;			
 
-	int				transport_type;		/*拥塞控制的类型*/
-	int				padding;			/*cc是否采用填充模式*/
-	int				fec;				/*是否启动FEC*/
+	int				transport_type;		/*congestion control type*/
+	int				padding;			/*use padding*/
+	int				fec;				/*enable fec*/
 
-	volatile int	run;				/*run线程标示 */
-	su_mutex		mutex;				/*用于上层多线程操作的保护锁*/
-	su_thread		thr;				/*线程ID*/
+	volatile int	run;				/*thread run flag*/
+	su_mutex		mutex;				
+	su_thread		thr;				/*thread ID*/
 
-	sim_sender_t*	sender;				/*视频发送器*/
-	sim_receiver_t*	receiver;			/*视频接收器*/
+	sim_sender_t*	sender;				
+	sim_receiver_t*	receiver;			
 
-	int				resend;				/*重发次数*/
-	int64_t			commad_ts;			/*信令时间戳*/
+	int				resend;				/*resend times*/
+	int64_t			commad_ts;			/*command timestamp*/
 	int64_t			stat_ts;
 
-	uint64_t		rbandwidth;			/*接收带宽*/
-	uint64_t		sbandwidth;			/*发送带宽*/
-	uint64_t		rcount;				/*接收的报文数量*/
-	uint64_t		scount;				/*发送的报文数量*/
+	uint64_t		rbandwidth;			/*receive bandwidth*/
+	uint64_t		sbandwidth;			/*send bandwidth*/
+	uint64_t		rcount;				/*received packets nubmer*/
+	uint64_t		scount;				/*sent packets number*/
 	uint64_t		video_bytes;
-	uint32_t		max_frame_size;		/*周期内最大帧*/
+	uint32_t		video_fps;
+	uint32_t		max_frame_size;		/*max frame size within a period*/
 
-	int				min_bitrate;		/*配置的最小码率，单位：bps*/
-	int				max_bitrate;		/*配置的最大码率，单位: bps*/
-	int				start_bitrate;		/*配置的起始码率，单位: bps*/
+	int				min_bitrate;		/*unit: bps*/
+	int				max_bitrate;		/*unit: bps*/
+	int				start_bitrate;		/*unit: bps*/
 
 	sim_notify_fn	notify_cb;
 	sim_change_bitrate_fn change_bitrate_cb;

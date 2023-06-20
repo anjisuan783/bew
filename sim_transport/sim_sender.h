@@ -29,8 +29,8 @@ struct __sim_sender
 
 	int64_t						first_ts;			/* first frame timestamp */
 
-	skiplist_t*					segs_cache;  /* meta segment list */
-	skiplist_t*					fecs_cache;  /* fec segment list */
+	skiplist_t*					segs_cache;  /* meta segment list for sending*/
+	skiplist_t*					fecs_cache;  /* fec segment list for sending*/
 	skiplist_t*					ack_cache;   /* sent segments need ack list */
 
 	razor_sender_t*				cc;					/* congestion controller */

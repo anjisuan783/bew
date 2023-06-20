@@ -1,5 +1,7 @@
 #include "flex_fec_receiver.h"
 
+#include <assert.h>
+
 #define k_default_cache_size 20
 
 static void flex_free_segment(skiplist_item_t key, skiplist_item_t val, void* args)
@@ -30,24 +32,25 @@ flex_fec_receiver_t* flex_fec_receiver_create(flex_segment_free_f seg_free, flex
 
 void flex_fec_receiver_desotry(flex_fec_receiver_t* r)
 {
-	if (r != NULL){
-		if (r->segs != NULL){
-			skiplist_destroy(r->segs);
-			r->segs = NULL;
-		}
+	if (r == NULL)
+		return ;
 
-		if (r->fecs != NULL){
-			skiplist_destroy(r->fecs);
-			r->fecs = NULL;
-		}
-
-		if (r->cache != NULL){
-			free(r->cache);
-			r->cache = NULL;
-		}
-
-		free(r);
+	if (r->segs != NULL){
+		skiplist_destroy(r->segs);
+		r->segs = NULL;
 	}
+
+	if (r->fecs != NULL){
+		skiplist_destroy(r->fecs);
+		r->fecs = NULL;
+	}
+
+	if (r->cache != NULL){
+		free(r->cache);
+		r->cache = NULL;
+	}
+
+	free(r);
 }
 
 void flex_fec_receiver_reset(flex_fec_receiver_t* r)
@@ -91,8 +94,8 @@ int flex_fec_receiver_full(flex_fec_receiver_t* r)
 {
 	if (skiplist_size(r->segs) >= r->count)
 		return 0;
-	else
-		return -1;
+	
+	return -1;
 }
 
 /*
@@ -109,19 +112,21 @@ static sim_segment_t* flex_recover_row(flex_fec_receiver_t* r, uint8_t row)
 	skiplist_item_t key;
 	skiplist_iter_t* iter;
 
-	// received all segments
+	// received all segments, do not need recovery
 	if (skiplist_size(r->segs) >= r->count)
 		return seg;
 
-	/*拼凑基于row的恢复信息，并判断是否丢包*/
+	/*judge lost or not*/
 	for (int i = 0; i < r->col; ++i){
 		key.u32 = row * r->col + i + r->base_id;
-		if (key.u32 >= r->base_id + r->count)
-			break;
+		if (key.u32 >= r->base_id + r->count) {
+			assert(0); break; // id overflow
+			
+		}
 
 		iter = skiplist_search(r->segs, key);
 		if (iter == NULL){
-			++loss; continue;
+			++loss; continue;  // segment lost
 		}
 		r->cache[count++] = iter->val.ptr;
 	}
@@ -132,10 +137,10 @@ static sim_segment_t* flex_recover_row(flex_fec_receiver_t* r, uint8_t row)
 
 	key.u16 = row;
 	iter = skiplist_search(r->fecs, key);
-	if (iter == NULL)
+	if (iter == NULL)  // no fec segment
 		return seg;
 
-	/*此处分配的内存，需要等待接收处理这个报文后进行释放*/
+	/*free after processing*/
 	seg = malloc(sizeof(sim_segment_t));
 	if (flex_fec_recover(r->cache, count, iter->val.ptr, seg) != 0){
 		free(seg);
@@ -161,20 +166,21 @@ static sim_segment_t* flex_recover_col(flex_fec_receiver_t* r, uint8_t col)
 	int count = 0, loss = 0;
 	skiplist_item_t key;
 
-	// received all segments
+	// received all segments, do not need recovery
 	if (skiplist_size(r->segs) >= r->count)
 		return seg;
 
 	skiplist_iter_t* iter;
-	/*拼凑基于colum的恢复信息，并判断是否丢包*/
+	/*judge lost or not*/
 	for (int i = 0; i < r->row; ++i){
 		key.u32 = i * r->col + col + r->base_id;
-		if (key.u32 >= r->base_id + r->count)
-			break;
+		if (key.u32 >= r->base_id + r->count) {
+			assert(0); break; // id overflow
+		}
 
 		iter = skiplist_search(r->segs, key);
 		if (iter == NULL){
-			loss++; continue;
+			loss++; continue; // lost
 		}
 		r->cache[count++] = iter->val.ptr;
 	}
@@ -184,10 +190,9 @@ static sim_segment_t* flex_recover_col(flex_fec_receiver_t* r, uint8_t col)
 
 	key.u16 = col | 0x80;
 	iter = skiplist_search(r->fecs, key);
-	if (iter == NULL)
+	if (iter == NULL)  // no fec segment
 		return seg;
 
-	/*此处分配的内存，需要等待接收处理这个报文后进行释放*/
 	seg = malloc(sizeof(sim_segment_t));
 	if (flex_fec_recover(r->cache, count, iter->val.ptr, seg) != 0){
 		free(seg);
@@ -199,11 +204,7 @@ static sim_segment_t* flex_recover_col(flex_fec_receiver_t* r, uint8_t col)
 
 sim_segment_t* flex_fec_receiver_on_fec(flex_fec_receiver_t* r, sim_fec_t* fec)
 {
-	sim_segment_t* recover;
 	skiplist_item_t key, val;
-	uint8_t index;
-
-	recover = NULL;
 
 	if (r->inited == 0 || fec == NULL)
 		goto err;
@@ -212,19 +213,21 @@ sim_segment_t* flex_fec_receiver_on_fec(flex_fec_receiver_t* r, sim_fec_t* fec)
 		goto err;
 
 	key.u16 = fec->index;
-	if (skiplist_search(r->fecs, key) != NULL)
+
+	if (skiplist_search(r->fecs, key) != NULL) // duplicated
 		goto err;
 
 	val.ptr = fec;
 	skiplist_insert(r->fecs, key, val);
 
-	/*确定所在矩阵的行或者列序号*/
-	index = fec->index & 0x7F;
-	if ((fec->index & 0x80) == 0x80)
+	/*get row or col in matrix*/
+	uint8_t index = fec->index & 0x7F;
+	sim_segment_t* recover = NULL;
+	if ((fec->index & 0x80) == 0x80) {
 		recover = flex_recover_col(r, index);
-	else
+	} else {
 		recover = flex_recover_row(r, index);
-
+	}
 	return recover;
 
 err:
