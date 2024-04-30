@@ -274,11 +274,13 @@ static uint16_t sim_split_frame(sim_session_t* s, sim_sender_t* sender, size_t s
 
 static void sim_sender_fec(sim_session_t* s, sim_sender_t* sender)
 {
+	// generating fec segments
 	flex_fec_sender_update(sender->flex, s->loss_fraction, sender->out_fecs);
 	if (s->loss_fraction && list_size(sender->out_fecs) == 0) {
 		//sim_info("sim_sender_fec loss_fraction=%d, fec num=%d, meta count=%d, row=%d, col=%d\n", 
 		//	(int)s->loss_fraction, (int)list_size(sender->out_fecs), (int)sender->flex->segs_count, sender->flex->row, sender->flex->col);
 	}
+
 	skiplist_item_t key, val;
 	sim_fec_t* fec;
 	while (list_size(sender->out_fecs) > 0) {

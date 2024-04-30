@@ -1,5 +1,7 @@
 #include "flex_fec_receiver.h"
 
+#include <assert.h>
+
 #define k_default_cache_size 20
 
 static void flex_free_segment(skiplist_item_t key, skiplist_item_t val, void* args) { }
@@ -28,24 +30,25 @@ flex_fec_receiver_t* flex_fec_receiver_create(flex_segment_free_f seg_free, flex
 
 void flex_fec_receiver_desotry(flex_fec_receiver_t* r)
 {
-	if (r != NULL){
-		if (r->segs != NULL){
-			skiplist_destroy(r->segs);
-			r->segs = NULL;
-		}
+	if (r == NULL)
+		return ;
 
-		if (r->fecs != NULL){
-			skiplist_destroy(r->fecs);
-			r->fecs = NULL;
-		}
-
-		if (r->cache != NULL){
-			free(r->cache);
-			r->cache = NULL;
-		}
-
-		free(r);
+	if (r->segs != NULL){
+		skiplist_destroy(r->segs);
+		r->segs = NULL;
 	}
+
+	if (r->fecs != NULL){
+		skiplist_destroy(r->fecs);
+		r->fecs = NULL;
+	}
+
+	if (r->cache != NULL){
+		free(r->cache);
+		r->cache = NULL;
+	}
+
+	free(r);
 }
 
 void flex_fec_receiver_reset(flex_fec_receiver_t* r)
@@ -111,12 +114,14 @@ static sim_segment_t* flex_recover_row(flex_fec_receiver_t* r, uint8_t row)
 	/*judge lost or not*/
 	for (int i = 0; i < r->col; ++i){
 		key.u32 = row * r->col + i + r->base_id;
-		if (key.u32 >= r->base_id + r->count)
-			break;
+		if (key.u32 >= r->base_id + r->count) {
+			break; // id overflow
+			
+		}
 
 		iter = skiplist_search(r->segs, key);
 		if (iter == NULL){
-			++loss; continue;
+			++loss; continue;  // segment lost
 		}
 		r->cache[count++] = iter->val.ptr;
 	}
@@ -129,7 +134,7 @@ static sim_segment_t* flex_recover_row(flex_fec_receiver_t* r, uint8_t row)
 
 	key.u16 = row;
 	iter = skiplist_search(r->fecs, key);
-	if (iter == NULL)
+	if (iter == NULL)  // no fec segment
 		return seg;
 
 	/*free after processing*/
@@ -166,12 +171,13 @@ static sim_segment_t* flex_recover_col(flex_fec_receiver_t* r, uint8_t col)
 	/*judge lost or not*/
 	for (int i = 0; i < r->row; ++i){
 		key.u32 = i * r->col + col + r->base_id;
-		if (key.u32 >= r->base_id + r->count)
-			break;
+		if (key.u32 >= r->base_id + r->count) {
+			break; // id overflow
+		}
 
 		iter = skiplist_search(r->segs, key);
 		if (iter == NULL){
-			loss++; continue;
+			loss++; continue; // lost
 		}
 		r->cache[count++] = iter->val.ptr;
 	}
@@ -181,7 +187,7 @@ static sim_segment_t* flex_recover_col(flex_fec_receiver_t* r, uint8_t col)
 
 	key.u16 = col | ROW_COL_INDEX_ID;
 	iter = skiplist_search(r->fecs, key);
-	if (iter == NULL)
+	if (iter == NULL)  // no fec segment
 		return seg;
 
 	seg = malloc(sizeof(sim_segment_t));
@@ -195,11 +201,7 @@ static sim_segment_t* flex_recover_col(flex_fec_receiver_t* r, uint8_t col)
 
 sim_segment_t* flex_fec_receiver_on_fec(flex_fec_receiver_t* r, sim_fec_t* fec)
 {
-	sim_segment_t* recover;
 	skiplist_item_t key, val;
-	uint8_t index;
-
-	recover = NULL;
 
 	if (r->inited == 0 || fec == NULL)
 		goto err;
@@ -208,14 +210,16 @@ sim_segment_t* flex_fec_receiver_on_fec(flex_fec_receiver_t* r, sim_fec_t* fec)
 		goto err;
 
 	key.u16 = fec->index;
-	if (skiplist_search(r->fecs, key) != NULL)
+
+	if (skiplist_search(r->fecs, key) != NULL) // duplicated
 		goto err;
 
 	val.ptr = fec;
 	skiplist_insert(r->fecs, key, val);
 
+	uint8_t index = fec->index & 0x7F;
+	sim_segment_t* recover = NULL;
 	/* try to recover when a fec seg received*/
-	index = fec->index & 0x7F;
 	if ((fec->index & ROW_COL_INDEX_ID) == ROW_COL_INDEX_ID) {
 		recover = flex_recover_col(r, index);
 	} else {

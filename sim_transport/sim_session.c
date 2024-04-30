@@ -255,6 +255,7 @@ int sim_session_send_video(sim_session_t* s, uint8_t payload_type, uint8_t ftype
 		goto err;
 
 	s->video_bytes += size;
+
 	if (s->sender != NULL)
 		ret = sim_sender_put(s, s->sender, payload_type, ftype, data, size);
 
@@ -685,6 +686,7 @@ static void sim_session_state_timer(sim_session_t* s, int64_t now_ts, sim_sessio
 
 	if (s->stat_ts + 1000 <= now_ts){
 		delay = (uint32_t)(now_ts - s->stat_ts) * 1024;
+
 		s->stat_ts = now_ts;
 
 		uint32_t pacer_ms = 0;

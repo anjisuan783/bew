@@ -33,6 +33,7 @@ struct __sim_session
 
 	uint32_t		scid;				/*sender call id*/
 	uint32_t		rcid;				/*receiver call id*/
+
 	uint32_t		uid;				/*user ID*/
 
 	uint32_t		rtt;
@@ -55,11 +56,13 @@ struct __sim_session
 	sim_receiver_t*	receiver;
 
 	int				resend;				/*command resend times*/
+
 	int64_t			commad_ts;			/*command timestamp*/
 	int64_t			stat_ts;
 
 	uint64_t		rbandwidth;			/*receive bandwidth*/
 	uint64_t		sbandwidth;			/*send bandwidth*/
+
 	uint64_t		rcount;				/*received packets*/
 	uint64_t		scount;				/*sent packets*/
 	uint64_t		video_bytes;

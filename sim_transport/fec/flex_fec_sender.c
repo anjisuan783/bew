@@ -82,17 +82,18 @@ void flex_fec_sender_add_segment(flex_fec_sender_t* fec, sim_segment_t* seg)
 int flex_fec_sender_num_packets(flex_fec_sender_t* fec, const uint8_t protect_fraction)
 {
 	int ret = 0;
+	const uint16_t segment_count = fec->segs_count;
 	fec->col = 0;
 	fec->row = 0;
 	// parameter check
-	if (fec->segs_count == 0 || protect_fraction == 0){	
+	if (segment_count == 0 || protect_fraction == 0){	
 		return ret;
 	}
 
 	int colum = 0;
 	// matrix
-	if (protect_fraction >= FEC_LOSS_THROLD && fec->segs_count >= 6){
-		double f = sqrt(fec->segs_count);
+	if (protect_fraction >= FEC_LOSS_THROLD && segment_count >= 6){
+		double f = sqrt(segment_count);
 		colum = (int)f;
 
 		// error more than 0.1f
@@ -102,30 +103,30 @@ int flex_fec_sender_num_packets(flex_fec_sender_t* fec, const uint8_t protect_fr
 		// 3 <= colum <= 20
 		colum = SU_MIN(20, SU_MAX(3, colum));
 
-		fec->row = fec->segs_count / colum;
-		if ((fec->segs_count % colum) != 0)
+		fec->row = segment_count / colum;
+		if ((segment_count % colum) != 0)
 			fec->row += 1;
 
-		fec->col = fec->segs_count / fec->row;
-		if (fec->segs_count % fec->row != 0)
+		fec->col = segment_count / fec->row;
+		if (segment_count % fec->row != 0)
 			fec->col += 1;
 
 		ret = 1;
 		return ret;
 	}
-	// protect_fraction < FEC_LOSS_THROLD || fec->segs_count < 6
-	colum = (fec->segs_count * protect_fraction + (1 << 7)) >> 8;
+	// protect_fraction < FEC_LOSS_THROLD || segment_count < 6
+	colum = (segment_count * protect_fraction + (1 << 7)) >> 8;
 	fec->row = 1;
 
 	if (colum == 0) {
-		fec->col = (uint8_t)fec->segs_count;
+		fec->col = (uint8_t)segment_count;
 	} else {
-		fec->col = fec->segs_count / colum;
-		if (fec->segs_count % colum > 0)
+		fec->col = segment_count / colum;
+		if (segment_count % colum > 0)
 			fec->col += 1;
 
-		fec->row = fec->segs_count / fec->col;
-		if ((fec->segs_count % fec->col) != 0)
+		fec->row = segment_count / fec->col;
+		if ((segment_count % fec->col) != 0)
 			fec->row += 1;
 
 		if (fec->row > 1) {
