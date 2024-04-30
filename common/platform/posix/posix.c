@@ -19,6 +19,7 @@
 #include <sys/ioctl.h>
 #ifdef __linux__
 #include <linux/if.h>
+#include <sys/syscall.h>
 #else
 #include <net/if.h>
 #endif
@@ -443,4 +444,6 @@ uint32_t su_get_local_ip()
 }
 #endif
 
-
+uint64_t su_get_tid() {
+	return syscall(__NR_gettid);
+}

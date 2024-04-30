@@ -235,7 +235,7 @@ void sender_estimation_update(sender_estimation_t* est, int64_t cur_ts, uint32_t
 			est->min_bitrates[est->end_index].bitrate = est->curr_bitrate;
 			est->end_index++;
 
-			razor_debug("sender_estimation_update start_phare, bitrate = %u\n", new_bitrate);
+			//razor_debug("sender_estimation_update start_phare, bitrate = %u\n", new_bitrate);
 			cap_bitrate_to_threshold(est, cur_ts, new_bitrate);
 			return;
 		}

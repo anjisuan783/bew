@@ -47,8 +47,7 @@ HRESULT CameraPlay_Graph::InitInstance(CComPtr<IBaseFilter> pSourceVideo, GUID m
 {
 	HRESULT hr = E_FAIL;
 
-	hr = Graph::InitInstance();
-	if (FAILED(hr))
+	if (FAILED(hr = Graph::InitInstance()))
 		return hr;
 
 	StopGraph();
@@ -70,8 +69,6 @@ HRESULT CameraPlay_Graph::InitInstance(CComPtr<IBaseFilter> pSourceVideo, GUID m
 	m_nHeight = nHeight;
 
 	hr = BuildGraph();
-	if (FAILED(hr))
-		return hr;
 
 	return hr;
 }
@@ -95,14 +92,12 @@ HRESULT CameraPlay_Graph::BuildGraph()
 
 	PIN_DIRECTION direction;
 
-	hr = m_pGraph->AddFilter(m_pSourceVideo, L"");
-	if (FAILED(hr))
+	if (FAILED(hr = m_pGraph->AddFilter(m_pSourceVideo, L"")))
 		return hr;
 
 	hr = m_pCaptureGraph->FindInterface(&PIN_CATEGORY_CAPTURE, &MEDIATYPE_Interleaved, 
 		m_pSourceVideo, IID_IAMStreamConfig, (void **)&m_pStreamConfig);
-	if (hr != NOERROR)
-	{
+	if (hr != NOERROR) {
 		hr = m_pCaptureGraph->FindInterface(&PIN_CATEGORY_CAPTURE, &MEDIATYPE_Video, 
 			m_pSourceVideo, IID_IAMStreamConfig, (void **)&m_pStreamConfig);
 	}
@@ -115,48 +110,35 @@ HRESULT CameraPlay_Graph::BuildGraph()
 	hr = m_pStreamConfig->GetNumberOfCapabilities(&iCount, &iSize);
 	if (FAILED(hr))
 		return hr;
-	if (iSize == sizeof(VIDEO_STREAM_CONFIG_CAPS))
-	{
-		for (int iFormat = 0; iFormat < iCount; iFormat++)
-		{
+	if (iSize == sizeof(VIDEO_STREAM_CONFIG_CAPS)) {
+		for (int iFormat = 0; iFormat < iCount; iFormat++) {
 			VIDEO_STREAM_CONFIG_CAPS scc;
-			AM_MEDIA_TYPE *pmtConfig;
+			AM_MEDIA_TYPE *pmtConfig = NULL;
 			hr = m_pStreamConfig->GetStreamCaps(iFormat, &pmtConfig, (BYTE*)&scc);
-			if (SUCCEEDED(hr))
-			{
+			if (SUCCEEDED(hr)) {
 				LONG nWidth = 0;
 				LONG nHeight = 0;
-				if (pmtConfig->formattype == FORMAT_DvInfo)
-				{
+				if (pmtConfig->formattype == FORMAT_DvInfo) {
 					DVINFO *pInfo = (DVINFO *)pmtConfig->pbFormat;
-				}
-				else if (pmtConfig->formattype == FORMAT_MPEGVideo)
-				{
+				} else if (pmtConfig->formattype == FORMAT_MPEGVideo){
 					MPEG1VIDEOINFO *pInfo = (MPEG1VIDEOINFO *)pmtConfig->pbFormat;
 					nWidth = pInfo->hdr.bmiHeader.biWidth;
 					nHeight = pInfo->hdr.bmiHeader.biHeight;
-				}
-				else if (pmtConfig->formattype == FORMAT_MPEG2Video)
-				{
+				} else if (pmtConfig->formattype == FORMAT_MPEG2Video) {
 					MPEG2VIDEOINFO *pInfo = (MPEG2VIDEOINFO *)pmtConfig->pbFormat;
 					nWidth = pInfo->hdr.bmiHeader.biWidth;
 					nHeight = pInfo->hdr.bmiHeader.biHeight;
-				}
-				else if (pmtConfig->formattype == FORMAT_VideoInfo)
-				{
+				} else if (pmtConfig->formattype == FORMAT_VideoInfo) {
 					VIDEOINFOHEADER *pInfo = (VIDEOINFOHEADER *)pmtConfig->pbFormat;
 					nWidth = pInfo->bmiHeader.biWidth;
 					nHeight = pInfo->bmiHeader.biHeight;
-				}
-				else if (pmtConfig->formattype == FORMAT_VideoInfo2)
-				{
+				} else if (pmtConfig->formattype == FORMAT_VideoInfo2) {
 					VIDEOINFOHEADER2 *pInfo = (VIDEOINFOHEADER2 *)pmtConfig->pbFormat;
 					nWidth = pInfo->bmiHeader.biWidth;
 					nHeight = pInfo->bmiHeader.biHeight;
 				}
 
-				if ((nWidth == m_nWidth) && (nHeight == m_nHeight))
-				{
+				if ((nWidth == m_nWidth) && (nHeight == m_nHeight)) {
 					pmt = pmtConfig;
 					break;
 				}
@@ -165,8 +147,7 @@ HRESULT CameraPlay_Graph::BuildGraph()
 			}
 		}
 	}
-	if (pmt != NULL)
-	{
+	if (pmt != NULL) {
 		hr = m_pStreamConfig->SetFormat(pmt);
 		DeleteMediaType(pmt);
 		if (FAILED(hr))
@@ -176,22 +157,16 @@ HRESULT CameraPlay_Graph::BuildGraph()
 
 	std::vector<CComPtr<IPin> > sourcePins;
 	CComPtr<IPin> pSourceOutputpin;
-	hr = DS_Utils::EnumPins(m_pSourceVideo, sourcePins);
-	if (FAILED(hr))
+	if (FAILED(hr= DS_Utils::EnumPins(m_pSourceVideo, sourcePins)))
 		return hr;
-	for (int i = 0; i < sourcePins.size(); i++)
-	{
+	for (int i = 0; i < sourcePins.size(); i++) {
 		CComPtr<IPin> pPin = sourcePins[i];
-		hr = pPin->QueryDirection(&direction);
-		if (FAILED(hr))
+		if (FAILED(hr = pPin->QueryDirection(&direction)))
 			return hr;
-		if (direction == PINDIR_OUTPUT)
-		{
+		if (direction == PINDIR_OUTPUT) {
 			GUID pinCategory;
-			if (SUCCEEDED(DS_Utils::GetPinCategory(pPin, pinCategory)))
-			{
-				if (pinCategory == PIN_CATEGORY_CAPTURE)
-				{
+			if (SUCCEEDED(DS_Utils::GetPinCategory(pPin, pinCategory))) {
+				if (pinCategory == PIN_CATEGORY_CAPTURE) {
 					pSourceOutputpin = pPin;
 					break;
 				}

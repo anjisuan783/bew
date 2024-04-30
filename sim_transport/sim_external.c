@@ -5,7 +5,8 @@
 * See the file LICENSE for redistribution information.
 */
 
-#include "sim_internal.h"
+#include "sim_external.h"
+#include "sim_session.h"
 
 static sim_session_t* g_session = NULL;
 static sim_log_fn g_log_func = NULL;
@@ -33,10 +34,8 @@ void sim_init(uint16_t port, void* event, sim_log_fn log_cb, sim_notify_fn notif
 
 	g_log_func = log_cb;
 
-	/*初始化razor的日志接口*/
 	razor_setup_log(log_cb);
 
-	/*创建session*/
 	g_session = sim_session_create(port, event, notify_cb, change_bitrate_cb, state_cb);
 }
 
@@ -94,9 +93,3 @@ int sim_recv_video(uint8_t* data, size_t* sizep, uint8_t* payload_type)
 
 	return sim_session_recv_video(g_session, data, sizep, payload_type);
 }
-
-
-
-
-
-

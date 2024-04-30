@@ -20,10 +20,10 @@ typedef struct
 	int			sample;
 }rate_bucket_t;
 
-/*单位时间带宽统计器*/
+/*bandwidth Statistician*/
 typedef struct
 {
-	int64_t			oldest_ts;
+	int64_t			oldest_ts;  // first bucket ts in window
 	int				oldest_index;
 
 	rate_bucket_t*	buckets;
@@ -31,7 +31,7 @@ typedef struct
 
 	float			scale;
 
-	int64_t			accumulated_count;
+	int64_t		accumulated_count;  // total bytes
 	int				sample_num;
 }rate_stat_t;
 
@@ -49,5 +49,3 @@ int					rate_stat_rate(rate_stat_t* rate, int64_t now_ts);
 #ifdef __cplusplus
 }
 #endif 
-
-

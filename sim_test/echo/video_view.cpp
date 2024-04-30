@@ -36,8 +36,7 @@ void VideoViewThread::run()
 		size = rec_->read(data, rc, key, payload_type);
 		if (size > 0 && player_ != NULL){
 			player_->write(data, size, payload_type);
-		}
-		else
+		} else
 			Sleep(1);
 	}
 

@@ -2,9 +2,7 @@
 
 #define k_default_cache_size 20
 
-static void flex_free_segment(skiplist_item_t key, skiplist_item_t val, void* args)
-{
-}
+static void flex_free_segment(skiplist_item_t key, skiplist_item_t val, void* args) { }
 
 static void flex_free_fec(skiplist_item_t key, skiplist_item_t val, void* args)
 {
@@ -89,10 +87,7 @@ void flex_fec_receiver_active(flex_fec_receiver_t* r, uint16_t fec_id, uint8_t c
 
 int flex_fec_receiver_full(flex_fec_receiver_t* r)
 {
-	if (skiplist_size(r->segs) >= r->count)
-		return 0;
-	else
-		return -1;
+	return (skiplist_size(r->segs) >= r->count) ? 0 : -1;
 }
 
 /*
@@ -109,11 +104,11 @@ static sim_segment_t* flex_recover_row(flex_fec_receiver_t* r, uint8_t row)
 	skiplist_item_t key;
 	skiplist_iter_t* iter;
 
-	// received all segments
+	// received all segments, do not need recovery
 	if (skiplist_size(r->segs) >= r->count)
 		return seg;
 
-	/*拼凑基于row的恢复信息，并判断是否丢包*/
+	/*judge lost or not*/
 	for (int i = 0; i < r->col; ++i){
 		key.u32 = row * r->col + i + r->base_id;
 		if (key.u32 >= r->base_id + r->count)
@@ -126,7 +121,9 @@ static sim_segment_t* flex_recover_row(flex_fec_receiver_t* r, uint8_t row)
 		r->cache[count++] = iter->val.ptr;
 	}
 
-	// can't recover
+	// 1.can't recover packet lost more than one of a row
+	// 2. loss == 0, no packet lost
+	// 3. count == 0, cache empty
 	if (loss != 1 || count == 0)
 		return seg;
 
@@ -135,7 +132,7 @@ static sim_segment_t* flex_recover_row(flex_fec_receiver_t* r, uint8_t row)
 	if (iter == NULL)
 		return seg;
 
-	/*此处分配的内存，需要等待接收处理这个报文后进行释放*/
+	/*free after processing*/
 	seg = malloc(sizeof(sim_segment_t));
 	if (flex_fec_recover(r->cache, count, iter->val.ptr, seg) != 0){
 		free(seg);
@@ -161,12 +158,12 @@ static sim_segment_t* flex_recover_col(flex_fec_receiver_t* r, uint8_t col)
 	int count = 0, loss = 0;
 	skiplist_item_t key;
 
-	// received all segments
+	// received all segments, do not need recovery
 	if (skiplist_size(r->segs) >= r->count)
 		return seg;
 
 	skiplist_iter_t* iter;
-	/*拼凑基于colum的恢复信息，并判断是否丢包*/
+	/*judge lost or not*/
 	for (int i = 0; i < r->row; ++i){
 		key.u32 = i * r->col + col + r->base_id;
 		if (key.u32 >= r->base_id + r->count)
@@ -182,12 +179,11 @@ static sim_segment_t* flex_recover_col(flex_fec_receiver_t* r, uint8_t col)
 	if (loss != 1 || count == 0)
 		return seg;
 
-	key.u16 = col | 0x80;
+	key.u16 = col | ROW_COL_INDEX_ID;
 	iter = skiplist_search(r->fecs, key);
 	if (iter == NULL)
 		return seg;
 
-	/*此处分配的内存，需要等待接收处理这个报文后进行释放*/
 	seg = malloc(sizeof(sim_segment_t));
 	if (flex_fec_recover(r->cache, count, iter->val.ptr, seg) != 0){
 		free(seg);
@@ -218,13 +214,13 @@ sim_segment_t* flex_fec_receiver_on_fec(flex_fec_receiver_t* r, sim_fec_t* fec)
 	val.ptr = fec;
 	skiplist_insert(r->fecs, key, val);
 
-	/*确定所在矩阵的行或者列序号*/
+	/* try to recover when a fec seg received*/
 	index = fec->index & 0x7F;
-	if ((fec->index & 0x80) == 0x80)
+	if ((fec->index & ROW_COL_INDEX_ID) == ROW_COL_INDEX_ID) {
 		recover = flex_recover_col(r, index);
-	else
+	} else {
 		recover = flex_recover_row(r, index);
-
+	}
 	return recover;
 
 err:
@@ -253,6 +249,7 @@ int flex_fec_receiver_on_segment(flex_fec_receiver_t* r, sim_segment_t* seg, bas
 	uint8_t col = (seg->packet_id - r->base_id) % r->col;
 	uint8_t row = (seg->packet_id - r->base_id) / r->col;
 
+	/* try to recover when a seg received*/
 	sim_segment_t* recover = flex_recover_row(r, row);
 	if (recover != NULL)
 		list_push(out, recover);

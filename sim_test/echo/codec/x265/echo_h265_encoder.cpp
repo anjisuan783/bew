@@ -46,10 +46,8 @@ bool H265Encoder::open_encoder()
 	if (x265_param_default_preset(en_param_, "faster", "zerolatency") != 0)//medium,veryslow
 		return false;
 
-	//设置编码器参数
 	config_param();
 
-	//构造编码器
 	if (x265_param_apply_profile(en_param_, "main") != 0)
 		return false;
 
@@ -111,7 +109,7 @@ int H265Encoder::get_bitrate() const
 {
 	return en_param_->rc.vbvMaxBitrate;
 }
-
+/*
 int H265Encoder::get_codec_width() const
 {
 	return resolution_infos[curr_resolution_].codec_width;
@@ -121,7 +119,7 @@ int H265Encoder::get_codec_height() const
 {
 	return resolution_infos[curr_resolution_].codec_height;
 }
-
+*/
 void H265Encoder::reconfig_encoder(uint32_t bitrate_kbps)
 {
 	const encoder_resolution_t& res = resolution_infos[curr_resolution_];
@@ -132,7 +130,6 @@ void H265Encoder::reconfig_encoder(uint32_t bitrate_kbps)
 	if (en_param_->rc.bitrate < res.min_rate)
 		bitrate_kbps = res.min_rate;
 
-	/*从新配置x.265的码率,及时生效*/
 	if (en_h_ != NULL)
 		x265_encoder_reconfig(en_h_, en_param_);
 }
@@ -214,7 +211,6 @@ bool H265Encoder::encode(uint8_t *in, int in_size, enum PixelFormat pix_fmt, uin
 	x265_nal* nal = NULL;
 	uint32_t i_nal = 0, i;
 
-	//X.265 编码
 	rc = x265_encoder_encode(en_h_, &nal, &i_nal, en_picture_, pic_out_);
 
 	*out_size = 0;
@@ -232,5 +228,3 @@ bool H265Encoder::encode(uint8_t *in, int in_size, enum PixelFormat pix_fmt, uin
 
 	return ret;
 }
-
-

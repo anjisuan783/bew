@@ -22,7 +22,6 @@ public:
 protected:
 	virtual void DoDataExchange(CDataExchange* pDX);	// DDX/DDV support
 
-
 protected:
 	LRESULT		OnConnectSucc(WPARAM wparam, LPARAM lparam);
 	LRESULT		OnConnectFailed(WPARAM wparam, LPARAM lparam);

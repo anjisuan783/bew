@@ -1,43 +1,50 @@
-/*-
+/*
 * Copyright (c) 2017-2018 Razor, Inc.
 *	All rights reserved.
 *
 * See the file LICENSE for redistribution information.
 */
 
-enum{
-	buffer_waiting = 0,
-	buffer_playing
-};
+#ifndef __SIM_RECEIVER_H__
+#define __SIM_RECEIVER_H__
+
+#include <stdint.h>
+#include "cf_skiplist.h"
+#include "sim_proto.h"
+#include "sim_fec.h"
+
+struct __razor_receiver;
+typedef struct __razor_receiver razor_receiver_t;
+
+struct __sim_session;
+typedef struct __sim_session sim_session_t;
 
 typedef struct
 {
-	uint32_t			fid;
+	uint32_t			fid;  // frame id
 	uint32_t			last_seq;
-	uint32_t			ts;
-	int					frame_type;
+	uint32_t			ts;  //Relative time
+	int					frame_type;  // I P
 
 	int					seg_count;
-	int					seg_number;
+	int					seg_number;  // total segment count of one frame
 	sim_segment_t**		segments;
 }sim_frame_t;
 
-typedef struct
+typedef struct __sim_frame_cache
 {
 	uint32_t			size;
+	uint32_t			min_seq;  // min sequeceid(packet id)
+	uint32_t			min_fid;  // min frame id(excluse self, begin from 0)
+	uint32_t			max_fid;  // max frame id(begin from 1)
+	uint32_t			play_frame_ts; // the playing frame(min frame ts, initial with first seg ts)
+	uint32_t			max_ts;  // max segment timestamp
 
-	uint32_t			min_seq;
+	uint32_t			frame_ts;		//begin frame ts in buffer
+	uint64_t			play_ts;		/*The timestamp of the current system clock.*/
 
-	uint32_t			min_fid;
-	uint32_t			max_fid;
-	uint32_t			play_frame_ts;
-	uint32_t			max_ts;			/*缓冲区中最大的ts*/
-
-	uint32_t			frame_ts;		/*已经播放的相对视频时间戳*/
-	uint64_t			play_ts;		/*当前系统时钟的时间戳*/
-
-	uint32_t			frame_timer;	/*帧间隔时间*/
-	uint32_t			wait_timer;		/*cache缓冲时间，以毫秒为单位，这个cache的时间长度应该是> rtt + 2 * rtt_val,根据重发报文的次数来决定*/
+	uint32_t			frame_timer;	/*The interval between frames*/
+	uint32_t			wait_timer;		/*jitter buffer length锛寀nit ms*/
 
 	int					state;
 	int					loss_flag;
@@ -46,27 +53,22 @@ typedef struct
 
 	skiplist_t*			discard_loss;
 
-	sim_frame_t*		frames;
+	sim_frame_t*		frames; //ring buffer
 }sim_frame_cache_t;
 
-enum{
-	fir_normal,
-	fir_flightting,
-};
-
-struct __sim_receiver
+typedef struct __sim_receiver
 {
 	uint32_t			base_uid;
 	uint32_t			base_seq;
 	uint32_t			max_seq;
-	uint32_t			max_ts;
+	uint32_t			max_ts;        // max received packet ts
 
 	skiplist_t*			loss;
-	int					loss_count;				/*单位时间内出现丢包的次数*/
+	int					loss_count;				/*The frequency of packet loss within a unit of time.*/
 
 	sim_frame_cache_t*	cache;
 
-	uint64_t			ack_ts;
+	uint64_t			ack_ts;        // last ack GET_SYS_MS
 	uint64_t			cache_ts;
 	uint64_t			active_ts;
 
@@ -77,17 +79,28 @@ struct __sim_receiver
 
 	int					actived;
 
-	/*和FIR有关的参数*/
-	uint32_t			fir_seq;			/*请求关键帧的消息seq*/
-	int					fir_state;			/*当前fir的状态，*/
+	/*about FIR*/
+	uint32_t			fir_seq;			/*The request for a keyframe message seq*/
+	int					fir_state;			
 
 	int					cc_type;
 
 	razor_receiver_t*	cc;
 	sim_session_t*		s;
 
-	sim_receiver_fec_t* recover;			/*FEC报文恢复对象*/
-};
+	sim_receiver_fec_t* recover;
+} sim_receiver_t;
 
+sim_receiver_t* sim_receiver_create(sim_session_t* s, int transport_type);
+void sim_receiver_destroy(sim_session_t* s, sim_receiver_t* r);
+void sim_receiver_reset(sim_session_t* s, sim_receiver_t* r, int transport_type);
+int sim_receiver_active(sim_session_t* s, sim_receiver_t* r, uint32_t uid);
+int sim_receiver_put(sim_session_t* s, sim_receiver_t* r, sim_segment_t* seg);
+int sim_receiver_put_fec(sim_session_t* s, sim_receiver_t* r, sim_fec_t* fec);
+int sim_receiver_padding(sim_session_t* s, sim_receiver_t* r, uint16_t transport_seq, uint32_t send_ts, size_t data_size);
+int sim_receiver_get(sim_session_t* s, sim_receiver_t* r, uint8_t* data, size_t* sizep, uint8_t* payload_type);
+void sim_receiver_timer(sim_session_t* s, sim_receiver_t* r, int64_t now_ts);
+void sim_receiver_update_rtt(sim_session_t* s, sim_receiver_t* r);
+uint32_t sim_receiver_cache_delay(sim_session_t* s, sim_receiver_t* r);
 
-
+#endif //!__SIM_RECEIVER_H__

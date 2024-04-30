@@ -12,30 +12,35 @@
 
 #include "codec_common.h"
 
-/*h264编码器，支持自动缩放编码,支持动态修改码率，动态修改分辨率。为了更好的和razor进行配合传输，编码器被设置成inter-refresh模式*/
+/*x264 inter-refresh */
 class H264Encoder : public VideoEncoder
 {
 public:
 	H264Encoder();
-	~H264Encoder();
+	~H264Encoder() override;
 
-	bool encode(uint8_t *in, int in_size, enum PixelFormat pix_fmt, uint8_t *out, int *out_size, int *frame_type, bool request_keyframe = false);
+	bool encode(uint8_t *in, 
+						  int in_size, 
+							enum PixelFormat pix_fmt, 
+							uint8_t *out, 
+							int *out_size, 
+							int *frame_type, 
+							bool request_keyframe = false) override;
 
-	int get_bitrate() const;
+	int get_bitrate() const override;
 
-	int get_codec_width() const;
-	int get_codec_height() const;
+	//int get_codec_width() const;
+	//int get_codec_height() const;
 
 protected:
 	void config_param();
-	void reconfig_encoder(uint32_t bitrate);
-	bool open_encoder();
-	void close_encoder();
+	void reconfig_encoder(uint32_t bitrate) override;
+	bool open_encoder() override;
+	void close_encoder() override;
 
 private:
-	//RGB -> YUV转换对象
 	SwsContext*		sws_context_;
-	//X264对象参数
+
 	x264_picture_t	pic_out_;
 	x264_picture_t	en_picture_;
 	x264_t *		en_h_;
@@ -44,5 +49,3 @@ private:
 };
 
 #endif
-
-

@@ -5,9 +5,7 @@
 * See the file LICENSE for redistribution information.
 */
 
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <windows.h>
+
 #include <process.h> 
 #include "cf_platform.h"
 
@@ -323,7 +321,7 @@ int su_addr_eq(su_addr* srcAddr, su_addr* dstAddr)
 
 void su_sleep(uint64_t seconds, uint64_t micro_seconds)
 {
-	struct timeval timeout = { seconds, micro_seconds };
+	struct timeval timeout = { (long)seconds, (long)micro_seconds };
 	select(0, NULL, NULL, NULL, &timeout);
 }
 
@@ -352,5 +350,9 @@ uint32_t su_get_local_ip()
 	}
 
 	return 0;
+}
+
+uint64_t su_get_tid() {
+	return (uint64_t)GetCurrentThreadId();
 }
 

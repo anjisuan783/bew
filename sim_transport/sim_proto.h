@@ -11,8 +11,7 @@
 #include "cf_platform.h"
 #include "cf_stream.h"
 
-enum
-{
+enum {
 	MIN_MSG_ID	=	0x10,
 
 	SIM_CONNECT,			
@@ -26,6 +25,7 @@ enum
 
 	SIM_SEG,
 	SIM_SEG_ACK,
+	
 	SIM_FEEDBACK,
 	SIM_FIR,				
 	SIM_PAD,				
@@ -77,20 +77,20 @@ typedef sim_connect_ack_t sim_disconnect_ack_t;
 
 typedef struct
 {
-	uint32_t	packet_id;		/*package id   key of sim_sender_t->ack_cache */
-	uint32_t	fid;					/*frame id*/
-	uint32_t	timestamp;			
-	uint16_t	index;					/*segment id of a frame*/
-	uint16_t	total;					/*total segments of a frame*/
-	uint8_t		ftype;					/* frame type key or delta*/
+	uint32_t	packet_id;		  /* sequence id exclude fec packets */
+	uint32_t	fid;					  /* frame id, start from 1 */
+	uint32_t	timestamp;			/* the time when split segments, value = now - sender->first_ts */
+	uint16_t	index;					/* segment id of one frame, start from 0 */
+	uint16_t	total;					/* total splited packets of one frame */
+	uint8_t		ftype;					/* frame type, 1 for key, 0 for delta */
 	uint8_t		payload_type;		
 
 	uint8_t		remb;					  /* use remb */
-	uint16_t	fec_id;					/*turn on fec*/
-	uint16_t	send_ts;				/* send timestamp */
+	uint16_t	fec_id;					/* fec object id, flex_fec_sender_t.fec_id */
+	uint16_t	send_ts;				/* the time when sending the seg, d-value relevant to seg->timestamp */
 	uint16_t	transport_seq;	/* sequence */
 	
-	uint32_t	send_id;        /* key of sim_sender_t->segs_cache */
+	uint32_t	send_id;        /* sequence id include fec packets */
 
 	uint16_t	data_size;      /* segment meta length */
 	uint8_t		data[SIM_VIDEO_SIZE]; /* segment meta data */
@@ -131,7 +131,7 @@ typedef struct
 #define PADDING_DATA_SIZE  500
 typedef struct
 {
-	uint32_t	send_ts;				/*send timestamp */
+	uint32_t	send_ts;				/*now_ts - sender->first_ts*/
 	uint16_t	transport_seq;
 
 	size_t		data_size;
@@ -156,18 +156,17 @@ typedef struct
 	uint8_t			row;					
 	uint8_t			col;					
 	uint8_t			index;					/* row number or column index of fec spare maxtrix 
-																 0x80 & index = 0 mean this is row index*/
+																 0x80 & index = 0 mean this is row index */
 	uint16_t		count;					/* packet number of a meta matrix */
 	uint32_t		base_id;				/* begin id */
 
-	uint32_t	send_ts;					
-	uint16_t	transport_seq;				/* automatic increase*/
+	uint32_t	send_ts;					/* now_ts - sender->first_ts */
+	uint16_t	transport_seq;		/* automatic increase */
 
 	sim_fec_meta_t	fec_meta;
 
 	uint16_t		fec_data_size;
 	uint8_t			fec_data[SIM_VIDEO_SIZE];
-	
 }sim_fec_t;
 
 void							sim_encode_msg(bin_stream_t* strm, sim_header_t* header, void* body);
@@ -176,6 +175,3 @@ int								sim_decode_msg(bin_stream_t* strm, sim_header_t* header, void* body);
 const char*						sim_get_msg_name(uint8_t msg_id);
 
 #endif
-
-
-

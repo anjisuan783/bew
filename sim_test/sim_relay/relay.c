@@ -57,7 +57,6 @@ static void peer_relay(const char* addr_str1, const char* addr_str2)
 	su_socket_destroy(fd);
 }
 
-/*这个是中转测试程序，用于模拟丢包和延迟用的，程序运行在linux下，配合sim_sender和sim_receiver进行测试，他们的地址设置到这里*/
 int main(int argc, const char* argv[])
 {
 	su_platform_init();
@@ -76,6 +75,3 @@ int main(int argc, const char* argv[])
 
 	return 0;
 }
-
-
-

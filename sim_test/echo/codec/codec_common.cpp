@@ -341,7 +341,3 @@ bool VideoDecoder::decode(uint8_t *in, int in_size, uint8_t **out, int &out_widt
 	}
 	return ret;
 }
-
-
-
-

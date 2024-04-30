@@ -179,8 +179,7 @@ skiplist_iter_t* skiplist_remove(skiplist_t* sl, skiplist_item_t key)
 			--sl->size;
 
 		ret = *stack[0];
-	}
-	else
+	} else
 		ret = NULL;
 	
 	return ret;

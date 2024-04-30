@@ -12,12 +12,11 @@
 #include <memory>
 #include <qedit.h>
 
-using namespace std;
 
 struct SGrabberSample
 {
 	double SampleTime;
-	shared_ptr<BYTE> pBuffer;
+	std::shared_ptr<BYTE> pBuffer;
 	long BufferLen;
 
 	SGrabberSample()

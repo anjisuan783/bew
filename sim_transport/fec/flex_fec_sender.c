@@ -1,6 +1,6 @@
 #include "flex_fec_sender.h"
 #include <math.h>
-#include "sim_internal.h"
+#include "sim_session.h"
 
 #define DEFAULT_SIZE 32
 #define FEC_REPAIR_WINDOW 500
@@ -52,9 +52,9 @@ void flex_fec_sender_add_segment(flex_fec_sender_t* fec, sim_segment_t* seg)
 	int64_t now_ts = GET_SYS_MS();
 	
 	/*update fec time window*/
-	if (fec->fec_ts == 0)
+	if (fec->fec_ts == 0) {
 		fec->fec_ts = now_ts;
-	else if (fec->fec_ts + FEC_REPAIR_WINDOW * 4 < now_ts) {
+	} else if (fec->fec_ts + FEC_REPAIR_WINDOW * 4 < now_ts) {
 		// fec within 2 second
 		fec->segs_count = 0;
 		fec->base_id = 0;
@@ -144,8 +144,8 @@ static inline int flex_fec_sender_over(flex_fec_sender_t* fec, int64_t now_ts)
 	return 1;
 }
 
-/* fec on a completed frame */
-void flex_fec_sender_update(flex_fec_sender_t* fec, const uint8_t protect_fraction, base_list_t* out_fecs)
+// generate fec data
+int flex_fec_sender_update(flex_fec_sender_t* fec, const uint8_t protect_fraction, base_list_t* out_fecs)
 {
 	sim_fec_t* out;
 	int row, col;
@@ -153,7 +153,7 @@ void flex_fec_sender_update(flex_fec_sender_t* fec, const uint8_t protect_fracti
 	int64_t now_ts = GET_SYS_MS();
 
 	if (flex_fec_sender_over(fec, now_ts)){
-		return ;
+		return -1;
 	}
 
 	int rc = flex_fec_sender_num_packets(fec, protect_fraction);
@@ -187,8 +187,7 @@ void flex_fec_sender_update(flex_fec_sender_t* fec, const uint8_t protect_fracti
 					out->count = fec->segs_count;
 
 					list_push(out_fecs, out);
-				}
-				else
+				} else
 					free(out);
 			}
 		}
@@ -230,12 +229,11 @@ void flex_fec_sender_update(flex_fec_sender_t* fec, const uint8_t protect_fracti
 						out->base_id = fec->base_id;
 						out->col = fec->col;
 						out->row = fec->row;
-						out->index = 0x80 | col;
+						out->index = ROW_COL_INDEX_ID | col;
 						out->count = fec->segs_count;
 
 						list_push(out_fecs, out);
-					}
-					else
+					} else
 						free(out);
 				}
 			}
@@ -251,6 +249,8 @@ void flex_fec_sender_update(flex_fec_sender_t* fec, const uint8_t protect_fracti
 	fec->fec_id++;
 	if (fec->fec_id == 0)
 		fec->fec_id = 1;
+
+	return rc;
 }
 
 void flex_fec_sender_release(flex_fec_sender_t* fec, base_list_t* out_fecs)

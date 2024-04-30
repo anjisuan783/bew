@@ -117,7 +117,7 @@ int log_win_write(int level, const char* file, int line, const char* fmt, va_lis
 	
 	if (log_file != NULL && log_file->fp != NULL){
 		su_mutex_lock(log_file->mutex);
-		snprintf(str_log, 1023, "%s %s:%d ", get_time_str(str_log), get_file_name(file), line);
+		snprintf(str_log, 1023, "[%llu]%s %s:%d ", su_get_tid(), get_time_str(str_log), get_file_name(file), line);
 		_vsnprintf(str_log + strlen(str_log), 1023 - strlen(str_log), fmt, vl);
 		fprintf(log_file->fp, "%s", str_log);
 		OutputDebugStringA(str_log);
@@ -127,6 +127,3 @@ int log_win_write(int level, const char* file, int line, const char* fmt, va_lis
 	
 	return 0;
 }
-
-
-

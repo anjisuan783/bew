@@ -87,7 +87,6 @@
     <ClInclude Include="fec\flex_fec_xor.h" />
     <ClInclude Include="sim_external.h" />
     <ClInclude Include="sim_fec.h" />
-    <ClInclude Include="sim_internal.h" />
     <ClInclude Include="sim_proto.h" />
     <ClInclude Include="sim_receiver.h" />
     <ClInclude Include="sim_sender.h" />

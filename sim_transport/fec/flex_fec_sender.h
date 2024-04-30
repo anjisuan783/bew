@@ -6,7 +6,7 @@
 
 typedef struct
 {
-	uint16_t		fec_id;  // maxtrix id
+	uint16_t		fec_id;  // matrix id, auto increate by flex_fec_sender_update, a new id for a frame or the segments exceed 100
 	uint8_t			row;
 	uint8_t			col;
 	uint32_t		base_id; // the min segment id
@@ -27,7 +27,7 @@ void flex_fec_sender_reset(flex_fec_sender_t* fec);
 // add segment to buffer, and find out the base_id
 void flex_fec_sender_add_segment(flex_fec_sender_t* fec, sim_segment_t* seg);
 // generate fec data
-void flex_fec_sender_update(flex_fec_sender_t* fec, const uint8_t protect_fraction, base_list_t* out_fecs);
+int flex_fec_sender_update(flex_fec_sender_t* fec, const uint8_t protect_fraction, base_list_t* out_fecs);
 void flex_fec_sender_release(flex_fec_sender_t* fec, base_list_t* out_fecs);
 // return 1: fec column on; 0: fec column off 
 int flex_fec_sender_num_packets(flex_fec_sender_t* fec, const uint8_t protect_fraction);

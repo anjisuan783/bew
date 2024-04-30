@@ -1,4 +1,7 @@
+#include <time.h>
+
 #ifdef WIN32
+#include <WinSock2.h>
 #include <windows.h>
 /*
 * Number of micro-seconds between the beginning of the Windows epoch

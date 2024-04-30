@@ -47,16 +47,19 @@ void rate_stat_reset(rate_stat_t* rate)
 	}
 }
 
-/*删除过期的统计数据*/
 static void rate_stat_erase(rate_stat_t* rate, int64_t now_ts)
 {
 	int64_t new_oldest_ts;
 	rate_bucket_t* bucket;
 
+	// no bucket
 	if (rate->oldest_ts == -1)
 		return;
 	
+	// window begin ts
 	new_oldest_ts = now_ts - rate->wnd_size + 1;
+
+	// buckets not full
 	if (new_oldest_ts <= rate->oldest_ts)
 		return;
 
@@ -68,6 +71,7 @@ static void rate_stat_erase(rate_stat_t* rate, int64_t now_ts)
 		bucket->sum = 0;
 		bucket->sample = 0;
 
+		//oldest_index rewind
 		if (++rate->oldest_index >= rate->wnd_size)
 			rate->oldest_index = 0;
 
@@ -99,11 +103,9 @@ void rate_stat_update(rate_stat_t* rate, size_t count, int64_t now_ts)
 	rate->buckets[index].sample++;
 
 	rate->accumulated_count += count;
-
-
 }
 
-/*获取统计到的码率*/
+/*bitrate statistics*/
 int rate_stat_rate(rate_stat_t* rate, int64_t now_ts)
 {
 	int ret, active_wnd_size;

@@ -112,7 +112,13 @@ public:
 
 	int get_payload_type() const;
 
-	virtual bool encode(uint8_t *in, int in_size, enum PixelFormat pix_fmt, uint8_t *out, int *out_size, int *frame_type, bool request_keyframe = false) = 0;
+	virtual bool encode(uint8_t *in, 
+										  int in_size, 
+											enum PixelFormat pix_fmt, 
+											uint8_t *out, 
+											int *out_size, 
+											int *frame_type, 
+											bool request_keyframe = false) = 0;
 	virtual int32_t get_bitrate() const = 0;
 
 protected:

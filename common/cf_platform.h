@@ -12,6 +12,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 #ifdef WIN32
+#include <WinSock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 
 #pragma warning(disable: 4996) //this is about sprintf, snprintf, vsnprintf
@@ -91,6 +93,8 @@ char* 		su_addr_to_iport(su_addr* addr, char* str, int len, uint16_t* port);
 void		su_addr_to_addr(su_addr* src, su_addr* dst);
 int			su_addr_cmp(su_addr* src, su_addr* dst);
 int			su_addr_eq(su_addr* src, su_addr* dst);
+
+uint64_t su_get_tid();
 
 #define IP_SIZE 32
 

@@ -55,8 +55,7 @@ static int razor_sender_add_packet(razor_sender_t* sender, uint32_t packet_id, i
 {
 	if (sender != NULL)
 		return sender_cc_add_pace_packet((sender_cc_t*)sender, packet_id, retrans, size);
-	else
-		return -1;
+	return -1;
 }
 
 static int razor_bbr_sender_add_packet(razor_sender_t* sender, uint32_t packet_id, int retrans, size_t size)
@@ -177,7 +176,8 @@ static int64_t razor_remb_sender_get_first_ts(razor_sender_t* sender)
 		return -1;
 }
 
-razor_sender_t* razor_sender_create(int type, int padding, void* trigger, bitrate_changed_func bitrate_cb, void* handler, pace_send_func send_cb, int queue_ms)
+razor_sender_t* razor_sender_create(int type, int padding, void* trigger, 
+		bitrate_changed_func bitrate_cb, void* handler, pace_send_func send_cb, int queue_ms)
 {
 	sender_cc_t* cc;
 	bbr_sender_t* bbr;

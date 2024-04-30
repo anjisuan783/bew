@@ -5,7 +5,9 @@
 * See the file LICENSE for redistribution information.
 */
 
-#include "sim_internal.h"
+#include "sim_limiter.h"
+
+#include "sim_session.h"
 
 #define MAX_LIMITER_RATE			(1024 * 800)
 void sim_limiter_init(sim_sender_limiter_t* limiter, int windows_size_ms)
@@ -45,7 +47,7 @@ static void sim_limiter_remove(sim_sender_limiter_t* limiter, int64_t now_ts)
 {
 	int offset, i, index;
 
-	offset = now_ts - limiter->oldest_ts;
+	offset = (int)(now_ts - limiter->oldest_ts);
 	if (offset < limiter->wnd_size + limiter->index){
 		for (i = limiter->index + 1; i <= offset; ++i){
 			index = i % limiter->wnd_size;
@@ -69,7 +71,6 @@ static void sim_limiter_remove(sim_sender_limiter_t* limiter, int64_t now_ts)
 	limiter->index = offset;
 }
 
-/*判断是否可以进行发送报文*/
 int	sim_limiter_try(sim_sender_limiter_t* limiter, size_t size, int64_t now_ts)
 {
 	if (now_ts < limiter->oldest_ts)
@@ -93,11 +94,10 @@ void sim_limiter_update(sim_sender_limiter_t* limiter, size_t size, int64_t now_
 	if (limiter->oldest_ts == -1)
 		limiter->oldest_ts = now_ts;
 
-	offset = (now_ts - limiter->oldest_ts);
+	offset = (int)(now_ts - limiter->oldest_ts);
 	if (offset > 0)
 		sim_limiter_remove(limiter, now_ts);
 
-	/*设置当前时刻*/
 	limiter->buckets[offset % limiter->wnd_size] += size;
 	limiter->wnd_bytes += size;
 }

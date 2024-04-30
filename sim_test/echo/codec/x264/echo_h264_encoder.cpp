@@ -37,19 +37,17 @@ H264Encoder::~H264Encoder()
 		destroy();
 }
 
-
 bool H264Encoder::open_encoder()
 {
 	payload_type_ = codec_h264;
 
 	x264_param_default(&en_param_);
-	if (x264_param_default_preset(&en_param_, "faster", "zerolatency") != 0)//medium,veryslow
+	if (x264_param_default_preset(&en_param_, "ultrafast", "zerolatency") != 0)//medium,veryslow
 		return false;
 
 	config_param();
 
-	//构造编码器
-	if (x264_param_apply_profile(&en_param_, "main") != 0)
+	if (x264_param_apply_profile(&en_param_, "baseline") != 0)
 		return false;
 
 	if ((en_h_ = x264_encoder_open(&en_param_)) == NULL)
@@ -58,7 +56,6 @@ bool H264Encoder::open_encoder()
 	if (x264_picture_alloc(&en_picture_, X264_CSP_I420, resolution_infos[curr_resolution_].codec_width, resolution_infos[curr_resolution_].codec_height) != 0)
 		return false;
 
-	//构造颜色空间转换器
 	sws_context_ = sws_getContext(src_width_, src_height_,
 		PIX_FMT_BGR24, resolution_infos[curr_resolution_].codec_width, resolution_infos[curr_resolution_].codec_height,
 		PIX_FMT_YUV420P, SWS_FAST_BILINEAR, NULL, NULL, NULL);
@@ -86,7 +83,7 @@ void H264Encoder::reconfig_encoder(uint32_t bitrate_kbps)
 {
 	en_param_.rc.i_vbv_max_bitrate = SU_MAX(bitrate_kbps, resolution_infos[curr_resolution_].min_rate);
 	en_param_.rc.i_bitrate = (en_param_.rc.i_vbv_max_bitrate + resolution_infos[curr_resolution_].min_rate) / 2;
-		/*从新配置x.264的码率,及时生效*/
+
 	if (en_h_ != NULL)
 		x264_encoder_reconfig(en_h_, &en_param_);
 }
@@ -95,7 +92,7 @@ int H264Encoder::get_bitrate() const
 {
 	return en_param_.rc.i_vbv_max_bitrate;
 }
-
+/*
 int H264Encoder::get_codec_width() const
 {
 	return resolution_infos[curr_resolution_].codec_width;
@@ -105,7 +102,7 @@ int H264Encoder::get_codec_height() const
 {
 	return resolution_infos[curr_resolution_].codec_height;
 }
-
+*/
 void H264Encoder::config_param()
 {
 	const encoder_resolution_t& res = resolution_infos[curr_resolution_];
@@ -184,10 +181,9 @@ bool H264Encoder::encode(uint8_t *in, int in_size, enum PixelFormat src_pix_fmt,
 	x264_nal_t *nal = NULL;
 	int i_nal = 0;
 
-	/*指定编码输出关键帧*/
+	/*keyframe request*/
 	en_picture_.i_type = request_keyframe ? X264_TYPE_IDR : X264_TYPE_AUTO;
 
-	//X.264 编码
 	rc = x264_encoder_encode(en_h_, &nal, &i_nal, &en_picture_, &pic_out_);
 	if (rc > 0){
 		*out_size = rc;

@@ -34,9 +34,9 @@ void VideoPlayhread::run()
 		size_t rc = MAX_PIC_SIZE;
 		if (sim_recv_video(data, &rc, &payload_type) == 0 && play_ != NULL){
 			play_->write(data, rc, payload_type);
+			continue;
 		}
-		else
-			Sleep(5);
+		Sleep(5);
 	}
 
 	free(data);

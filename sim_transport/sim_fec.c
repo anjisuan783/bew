@@ -4,10 +4,11 @@
 *
 * See the file LICENSE for redistribution information.
 */
-
-#include "sim_internal.h"
+#include "sim_fec.h"
 #include "flex_fec_receiver.h"
 #include <assert.h>
+#include "sim_session.h"
+
 
 static void sim_receiver_fec_free_segment(sim_segment_t* seg, void* args)
 {
@@ -159,7 +160,7 @@ void sim_fec_put_fec_packet(sim_session_t* s, sim_receiver_fec_t* f, sim_fec_t* 
 		flex->fec_ts = fec->send_ts;
 		flex_fec_receiver_active(flex, fec->fec_id, fec->col, fec->row, fec->base_id, fec->count);
 
-		/*½«ÒÑ¾­ÔÚsegsÖÐµÄsegments·ÅÈëFLEXÖÐ*/
+		/*ï¿½ï¿½ï¿½Ñ¾ï¿½ï¿½ï¿½segsï¿½Ðµï¿½segmentsï¿½ï¿½ï¿½ï¿½FLEXï¿½ï¿½*/
 		sim_fec_add_segment_to_flex(s, f, flex, fec);
 	}
 	else
@@ -183,7 +184,6 @@ void sim_fec_put_segment(sim_session_t* s, sim_receiver_fec_t* f, sim_segment_t*
 
 	f->max_ts = SU_MAX(seg->timestamp, f->max_ts);
 
-	/*Õâ¸ömalloc³öÀ´µÄÄÚ´æ¿éÔÚskiplist_remove(f->segs_cache)×Ô¶¯ÊÍ·Å*/
 	in_seg = malloc(sizeof(sim_segment_t));
 	*in_seg = *seg;
 	val.ptr = in_seg;
@@ -199,7 +199,7 @@ void sim_fec_put_segment(sim_session_t* s, sim_receiver_fec_t* f, sim_segment_t*
 	while (list_size(f->out) > 0)
 		sim_fec_packet_add_recover(s, f, list_pop(f->out));
 	
-	/*Èç¹ûÒÑ¾­Íê³ÉÁË£¬ÊÍ·ÅµôFEC¶ÔÏó*/
+	/*ï¿½ï¿½ï¿½ï¿½Ñ¾ï¿½ï¿½ï¿½ï¿½ï¿½Ë£ï¿½ï¿½Í·Åµï¿½FECï¿½ï¿½ï¿½ï¿½*/
 	if (flex_fec_receiver_full(iter->val.ptr) == 0){
 		sim_fec_evict_segment(s, f, iter->val.ptr);
 		skiplist_remove(f->flexes, iter->key);

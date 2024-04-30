@@ -23,7 +23,6 @@
 #include "simple_lock.h"
 
 using namespace ds;
-using namespace std;
 
 enum PIX_FORMAT
 {
@@ -38,13 +37,13 @@ enum PIX_FORMAT
 #define MAX_PIC_SIZE 1024000
 
 typedef struct{
-	int				codec;			/*codec类型*/
-	int				rate;			/*每秒的帧数*/
-	PIX_FORMAT		pix_format;		/*视频输入源格式*/
-	uint32_t		width;			/*输入视频的宽度*/
-	uint32_t		height;			/*输入视频的高度*/
-	uint32_t		codec_width;	/*编码视频的宽度*/
-	uint32_t		codec_height;	/*编码视频的高度*/
+	int				codec;
+	uint32_t		rate;			/*fps*/
+	PIX_FORMAT		pix_format;	
+	uint32_t		width;
+	uint32_t		height;
+	uint32_t		codec_width;
+	uint32_t		codec_height;
 }video_info_t;
 
 class CFVideoRecorder
@@ -78,36 +77,37 @@ private:
 	bool			capture_sample();
 	void			rotate_pic();
 
+	int GetBestMatchedCapability(const SCaptureDevice& dev, const SDeviceCapability& requested);
+
 private:
 	bool				open_;
 
 	std::wstring		dev_;
 	video_info_t		info_;
-	std::string			resolution_;
 
-	//视频抓捕的图形器
 	CameraPlay_Graph	cam_graph_;
 	GUID				media_type_;
 
 	CDib				dib_;
 
-	int64_t			    frame_intval_; //帧间隔，毫秒单位
+	int64_t			    frame_intval_; //unit ms
 	LARGE_INTEGER		prev_timer_;
 	LARGE_INTEGER       counter_frequency_;
 
 	HWND				hwnd_;
 	HDC					hwnd_hdc_;
-	RECT                hwnd_rect_;
+	RECT        hwnd_rect_;
 
 	uint8_t*			video_data_;
 	uint32_t			video_data_size_;
 
 	SimpleLock			lock_;
 
-	/*增加编码器对象*/
 	VideoEncoder*		encoder_;
 	bool				encode_on_;
 	bool				intra_frame_;
+
+	int frame_count_ = 0;
 };
 
 class CFVideoPlayer 
@@ -135,14 +135,14 @@ private:
 	uint32_t    decode_data_height_;
 
 	uint8_t*	data_;
-	/*增加解码器对象*/
+	
 	int			codec_type_;
 	VideoDecoder* decoder_;
 
-	std::string	resolution_;
+	int frame_count_ = 0;
 };
 
-int get_camera_input_devices(vector<std::wstring>& vec_cameras);
+int get_camera_input_devices(std::vector<std::wstring>& vec_cameras);
 
 #endif
 

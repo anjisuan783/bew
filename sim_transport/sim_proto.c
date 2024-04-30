@@ -91,7 +91,7 @@ void sim_encode_msg(bin_stream_t* strm, sim_header_t* header, void* body)
 		;
 	}
 
-	/*Ôö¼ÓCRCÖµ*/
+	/*add CRC*/
 	crc = crc32(CRC_VAL, strm->data, strm->used);
 	mach_uint32_write(strm, crc);
 }

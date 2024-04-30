@@ -15,11 +15,8 @@
 #include <vector>
 #include <string>
 
-using namespace std;
-
 #ifdef _DEBUG
 #define new DEBUG_NEW
-//#include "vld.h"
 #endif
 
 
@@ -57,12 +54,12 @@ END_MESSAGE_MAP()
 
 // CechoDlg dialog
 
-//180.150.184.115, 192.168.150.30
+#define DEFAULT_RELAY_ADDR _T("111.231.32.122")
 
 CechoDlg::CechoDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(CechoDlg::IDD, pParent)
 	, m_strDev(_T(""))
-	, m_strIP(_T("172.16.6.133"))
+	, m_strIP(DEFAULT_RELAY_ADDR)
 	, m_iPort(SIM_PORT)
 	, m_iUser(1000)
 	, m_strState(_T(""))
@@ -177,7 +174,6 @@ BOOL CechoDlg::OnInitDialog()
 
 	::CoInitialize(NULL);
 
-	//初始化编码器参数
 	setup_codec(codec_h264);
 
 	m_iUser = rand() % 10000 + 1000;
@@ -314,19 +310,12 @@ void CechoDlg::OnDestroy()
 
 void CechoDlg::InitVideoDevices()
 {
-	vector<wstring> cameras;
-	int count = get_camera_input_devices(cameras);
-	int cur_count = m_cbxDevice.GetCount();
-	for (int i = 0; i < cur_count; ++i)
-		m_cbxDevice.DeleteString(0);
-
+	// display video device
+	std::vector<std::wstring> cameras;
+	get_camera_input_devices(cameras);
 	for (std::wstring& name : cameras)
 		m_cbxDevice.AddString(name.c_str());
-
-	if (cur_count > 0)
-		m_cbxDevice.SetCurSel(cur_count - 1);
-	else
-		m_cbxDevice.SetCurSel(0);
+	m_cbxDevice.SetCurSel(0);
 
 	m_cbxCC.AddString(_T("BBR"));
 	m_cbxCC.AddString(_T("GCC"));
@@ -353,23 +342,17 @@ int CechoDlg::GetVideoResolution()
 	int ret = VIDEO_480P;
 	if (m_strResolution == _T("120P")){
 		ret = VIDEO_120P;
-	}
-	else if (m_strResolution == _T("240P")){
+	} else if (m_strResolution == _T("240P")){
 		ret = VIDEO_240P;
-	}
-	else if (m_strResolution == _T("360P")){
+	} else if (m_strResolution == _T("360P")){
 		ret = VIDEO_360P;
-	}
-	else if (m_strResolution == _T("480P")){
+	} else if (m_strResolution == _T("480P")){
 		ret = VIDEO_480P;
-	}
-	else if (m_strResolution == _T("640P")){
+	} else if (m_strResolution == _T("640P")){
 		ret = VIDEO_640P;
-	}
-	else if (m_strResolution == _T("720P")){
+	} else if (m_strResolution == _T("720P")){
 		ret = VIDEO_720P;
-	}
-	else if (m_strResolution == _T("1080P")){
+	} else if (m_strResolution == _T("1080P")){
 		ret = VIDEO_1080P;
 	}
 
@@ -390,20 +373,18 @@ int CechoDlg::GetCodec()
 void CechoDlg::OnBnClickedBtnview()
 {
 	UpdateData(TRUE);
-	// TODO: Add your control notification handler code here
-	if (!m_viewing){
+	
+	if (!m_viewing) {
 		m_viewing = TRUE;
 
-		/*创建一个录制设备，包括视频编解码*/
-		TCHAR* device;
-		device = m_strDev.GetBuffer(m_strDev.GetLength());
+		TCHAR* device = m_strDev.GetBuffer(m_strDev.GetLength());
 		m_viRecorder = new CFVideoRecorder(device);
 
 		int i = GetVideoResolution();
 
 		video_info_t info;
 		info.pix_format = RGB24;
-		info.rate = 24;
+		info.rate = 30;
 		info.codec = GetCodec();
 		info.width = resolution_infos[i].codec_width;
 		info.height = resolution_infos[i].codec_height;
@@ -418,17 +399,14 @@ void CechoDlg::OnBnClickedBtnview()
 		m_strDev.ReleaseBuffer();
 		m_viRecorder->open();
 
-		/*创建一个播放设备*/
 		m_dstVideo.GetClientRect(&display_rect);
 		m_viPlayer = new CFVideoPlayer(m_dstVideo.GetSafeHwnd(), display_rect);
 		m_viPlayer->open();
 
-		/*打开预览线程*/
 		m_btnView.SetWindowText(_T("stop view"));
 		m_view.set_video_devices(m_viRecorder, m_viPlayer);
 		m_view.start();
-	}
-	else{
+	} else {
 		m_viewing = FALSE;
 
 		m_view.stop();
@@ -448,9 +426,12 @@ void CechoDlg::OnBnClickedBtnview()
 	}
 }
 
-
 void CechoDlg::OnBnClickedBtnconnect()
 {
+	if (m_viewing) {
+		OnBnClickedBtnview();
+	}
+
 	UpdateData(TRUE);
 	int transport_type = gcc_transport;
 	if (!m_connected){
@@ -474,8 +455,7 @@ void CechoDlg::OnBnClickedBtnconnect()
 			m_btnView.EnableWindow(FALSE);
 			m_btnEcho.SetWindowText(_T("stop echo"));
 			m_connected = TRUE;
-		}
-		else{
+		} else {
 			m_strInfo += _T("connect P2P network failed!\r\n");
 			UpdateData(FALSE);
 		}
@@ -500,7 +480,6 @@ LRESULT CechoDlg::OnConnectSucc(WPARAM wparam, LPARAM lparam)
 
 	UpdateData(FALSE);
 
-	/*创建一个录制设备，包括视频编解码*/
 	TCHAR* device;
 	device = m_strDev.GetBuffer(m_strDev.GetLength());
 	m_viRecorder = new CFVideoRecorder(device);
@@ -509,7 +488,7 @@ LRESULT CechoDlg::OnConnectSucc(WPARAM wparam, LPARAM lparam)
 
 	video_info_t info;
 	info.pix_format = RGB24;
-	info.rate = 24;
+	info.rate = 30;
 	info.codec = GetCodec();
 	info.width = resolution_infos[i].codec_width;
 	info.height = resolution_infos[i].codec_height;
@@ -524,7 +503,6 @@ LRESULT CechoDlg::OnConnectSucc(WPARAM wparam, LPARAM lparam)
 	m_strDev.ReleaseBuffer();
 	m_viRecorder->open();
 
-	/*启动录制线程*/
 	m_frame->start_recorder(m_viRecorder);
 	m_recording = TRUE;
 
@@ -594,7 +572,6 @@ LRESULT CechoDlg::OnStartPlay(WPARAM wparam, LPARAM lparam)
 	m_strInfo += data;
 	UpdateData(FALSE);
 
-	/*创建一个播放设备*/
 	RECT display_rect;
 	m_dstVideo.GetClientRect(&display_rect);
 	m_viPlayer = new CFVideoPlayer(m_dstVideo.GetSafeHwnd(), display_rect);
@@ -634,7 +611,6 @@ LRESULT CechoDlg::OnChangeBitrate(WPARAM wparam, LPARAM lparam)
 {
 	UpdateData(TRUE);
 
-	//进行发送端带宽调整
 	if (m_viRecorder != NULL){
 		uint32_t bitrate = (uint32_t)wparam;
 		int lost = (int)lparam;
@@ -716,12 +692,10 @@ void CechoDlg::OnTimer(UINT_PTR nIDEvent)
 	CDialogEx::OnTimer(nIDEvent);
 }
 
-
 void CechoDlg::OnBnClickedChkpad()
 {
 	// TODO: Add your control notification handler code here
 }
-
 
 void CechoDlg::OnCbnSelchangeCbxCc()
 {

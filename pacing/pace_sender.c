@@ -88,8 +88,7 @@ int64_t pace_expected_queue_ms(pace_sender_t* pace)
 {
 	if (pace->pacing_bitrate_kpbs > 0)
 		return pacer_queue_bytes(&pace->que) * 8 / pace->pacing_bitrate_kpbs;
-	else
-		return 0;
+	return 0;
 }
 
 int64_t pace_get_limited_start_time(pace_sender_t* pace)
@@ -154,14 +153,9 @@ void pace_try_transmit(pace_sender_t* pace, int64_t now_ts)
 
 	pace->last_update_ts = now_ts;
 	if (sent_bytes > 0){
-		/*更新预测器,假如预测期空闲的空间太多，进行加大码率*/
+		/*Update the predictor. 
+			In the event that there is an excessive amount of idle space in the prediction window, 
+			consider increasing the bit rate.*/
 		alr_detector_bytes_sent(pace->alr, sent_bytes, elapsed_ms);
 	}
 }
-
-
-
-
-
-
-

@@ -5,9 +5,14 @@
 * See the file LICENSE for redistribution information.
 */
 
-#include "sim_internal.h"
+#include "sim_session.h"
+#include "sim_receiver.h"
+#include "sim_sender.h"
+
+#include <assert.h>
 #include <time.h>
 
+//state
 enum{
 	session_idle = 0x00,
 	session_connecting,
@@ -15,6 +20,7 @@ enum{
 	session_disconnected
 };
 
+//interrupt
 enum{
 	net_normal,
 	net_interrupt,
@@ -26,51 +32,53 @@ static void		sim_session_process(sim_session_t* s, bin_stream_t* strm, su_addr* 
 static void		sim_session_heartbeat(sim_session_t* s, int64_t now_ts);
 
 typedef void(*session_command_fn)(sim_session_t* s, uint64_t ts);
+typedef void(*sim_session_processer)(sim_session_t* s, sim_header_t* header, bin_stream_t* strm, su_addr* addr);
 
 #define MAX_TRY_TIME 100
 
+static sim_session_processer* process_fn[MAX_MSG_ID];
+
 sim_session_t* sim_session_create(uint16_t port, void* event, sim_notify_fn notify_cb, sim_change_bitrate_fn change_bitrate_cb, sim_state_fn state_cb)
 {
-	sim_session_t* session = calloc(1, sizeof(sim_session_t));
-	session->scid = rand();
-	session->rcid = 0;
-	session->uid = 0;
-	session->rtt = 50;
-	session->rtt_var = 5;
-	session->loss_fraction = 0;
+	sim_session_t* s = calloc(1, sizeof(sim_session_t));
+	s->scid = rand();
+	s->rcid = 0;
+	s->uid = 0;
+	s->rtt = 50;
+	s->rtt_var = 5;
+	s->loss_fraction = 0;
 
-	session->state = session_idle;
-	session->interrupt = net_normal;
+	s->state = session_idle;
+	s->interrupt = net_normal;
 
-	session->min_bitrate = MIN_BITRATE;
-	session->max_bitrate = MAX_BITRATE;
-	session->start_bitrate = START_BITRATE;
-	session->commad_ts = GET_SYS_MS();
+	s->min_bitrate = MIN_BITRATE;
+	s->max_bitrate = MAX_BITRATE;
+	s->start_bitrate = START_BITRATE;
+	s->commad_ts = GET_SYS_MS();
 
-	session->transport_type = gcc_transport;
-	session->padding = 1;
-	session->fec = 1;
+	s->transport_type = gcc_transport;
+	s->padding = 1;
+	s->fec = 1;
 
-	session->notify_cb = notify_cb;
-	session->change_bitrate_cb = change_bitrate_cb;
-	session->state_cb = state_cb;
-	session->event = event;
+	s->notify_cb = notify_cb;
+	s->change_bitrate_cb = change_bitrate_cb;
+	s->state_cb = state_cb;
+	s->event = event;
 
-	if (su_udp_create(NULL, port, &session->s) != 0){
-		free(session);
+	if (su_udp_create(NULL, port, &s->s) != 0){
+		free(s);
 		goto err;
 	}
 
-	su_socket_noblocking(session->s);
+	su_socket_noblocking(s->s);
 
-	session->mutex = su_create_mutex();
-	bin_stream_init(&session->sstrm);
+	s->mutex = su_create_mutex();
+	bin_stream_init(&s->sstrm);
 
-	session->run = 1;
-	session->thr = su_create_thread(NULL, sim_session_loop_event, session);
-
+	s->run = 1;
+	s->thr = su_create_thread(NULL, sim_session_loop_event, s);
 err:
-	return session;
+	return s;
 }
 
 void sim_session_destroy(sim_session_t* s)
@@ -143,7 +151,7 @@ static void sim_session_send_connect(sim_session_t* s, int64_t now_ts)
 	body.cid = s->scid;
 	body.token_size = 0;
 	body.cc_type = (uint8_t)s->transport_type;
-	/*???????????????§Õtoken*/
+	/*?????????????????token*/
 
 	sim_encode_msg(&s->sstrm, &header, &body);
 	sim_session_network_send(s, &s->sstrm);
@@ -154,7 +162,13 @@ static void sim_session_send_connect(sim_session_t* s, int64_t now_ts)
 	s->resend++;
 }
 
-int sim_session_connect(sim_session_t* s, uint32_t local_uid, const char* peer_ip, uint16_t peer_port, int transport_type, int padding, int fec)
+int sim_session_connect(sim_session_t* s, 
+												uint32_t local_uid, 
+												const char* peer_ip, 
+												uint16_t peer_port, 
+												int transport_type, 
+												int padding, 
+												int fec)
 {
 	int ret = -1;
 	su_mutex_lock(s->mutex);
@@ -234,11 +248,10 @@ int sim_session_send_video(sim_session_t* s, uint8_t payload_type, uint8_t ftype
 	int ret = -1;
 	su_mutex_lock(s->mutex);
 
-	if (s->state != session_connected || size <= 0){
+	if (s->state != session_connected || size <= 0)
 		goto err;
-	}
 
-	if (s->interrupt == net_interrupt) /*?????§Ø???????????*/
+	if (s->interrupt == net_interrupt)
 		goto err;
 
 	s->video_bytes += size;
@@ -246,6 +259,7 @@ int sim_session_send_video(sim_session_t* s, uint8_t payload_type, uint8_t ftype
 		ret = sim_sender_put(s, s->sender, payload_type, ftype, data, size);
 
 	s->max_frame_size = SU_MAX(size, s->max_frame_size);
+
 err:
 	su_mutex_unlock(s->mutex);
 	return ret;
@@ -270,7 +284,6 @@ void sim_session_set_bitrates(sim_session_t* s, uint32_t min_bitrate, uint32_t s
 	s->start_bitrate = (int)(start_bitrate * (SIM_SEGMENT_HEADER_SIZE + SIM_VIDEO_SIZE) * 1.07 / SIM_VIDEO_SIZE);
 	s->start_bitrate = SU_MIN(max_bitrate, s->start_bitrate);
 
-	/*???sender??§Õ???????sender create????????????*/
 	if (s->sender != NULL)
 		sim_sender_set_bitrates(s, s->sender, min_bitrate, s->start_bitrate, max_bitrate);
 }
@@ -282,24 +295,27 @@ int sim_session_network_send(sim_session_t* s, bin_stream_t* strm)
 	
 	s->sbandwidth += strm->used;
 	s->scount++;
-	//if (rand() % 100 < 80)
+
 	return su_udp_send(s->s, &s->peer, strm->data, strm->used);
-	//return 0;
 }
 
+// keep_rtt is real rtt
 void sim_session_calculate_rtt(sim_session_t* s, uint32_t keep_rtt)
 {
 	if (keep_rtt < 5)
 		keep_rtt = 5;
 
-	s->rtt_var = (s->rtt_var * 3 + SU_ABS(s->rtt, keep_rtt)) / 4;
+	// s->rtt_var = 3/4 * s->rtt_var + 1/4 * |s->rtt - keep_rtt|;
+	s->rtt_var = (s->rtt_var * 3 + SU_ABS(s->rtt, keep_rtt)) >> 2;
 	if (s->rtt_var < 10)
 		s->rtt_var = 10;
 
-	s->rtt = (7 * s->rtt + keep_rtt) / 8;
+	// s->rtt = 7/8 * s->rtt + 1/8*keep_rtt;
+	s->rtt = (7 * s->rtt + keep_rtt) >> 3;
 	if (s->rtt < 10)
 		s->rtt = 10;
 
+	//sim_debug("sim_session_calculate_rtt rtt=%u rttvar=%u realrtt=%u\n", s->rtt, s->rtt_var, keep_rtt);
 	if (s->sender != NULL){
 		sim_sender_update_rtt(s, s->sender);
 		s->sender->cc->update_rtt(s->sender->cc, keep_rtt);
@@ -327,6 +343,7 @@ static void* sim_session_loop_event(void* arg)
 		bin_stream_rewind(&rstrm, 1);
 
 		rc = su_udp_recv(s->s, &peer, rstrm.data, rstrm.size, 5);
+	
 		if (rc >= SIM_HEADER_SIZE){
 			rstrm.used = rc;
 
@@ -368,15 +385,13 @@ static void process_sim_connect(sim_session_t* s, sim_header_t* header, bin_stre
 	INIT_SIM_HEADER(h, SIM_CONNECT_ACK, s->uid);
 	ack.cid = body.cid;
 	ack.result = 0;
-	
-	/*??????????*/
+
 	if (s->receiver == NULL){
 		s->receiver = sim_receiver_create(s, body.cc_type);
 		s->notify_cb(s->event, sim_start_play_notify, header->uid);
-	}
-	else
+	} else {
 		sim_receiver_reset(s, s->receiver, body.cc_type);
-
+	}
 	s->rcid = body.cid;
 
 	sim_info("receiver actived!!!\n");
@@ -406,22 +421,17 @@ static void process_sim_connect_ack(sim_session_t* s, sim_header_t* header, bin_
 	if (ack.result != 0){
 		sim_info("connect failed, result = %u\n", ack.result);
 		sim_session_reset(s);
-	}
-	else{
+	} else {
 		s->state = session_connected;
-		/*????sender*/
 		if (s->sender == NULL){
 			s->sender = sim_sender_create(s, s->transport_type, s->padding, s->fec);
-		}
-		else
+		} else {
 			sim_sender_reset(s, s->sender, s->transport_type, s->padding, s->fec);
+		}
 		sim_sender_active(s, s->sender);
 
-
-		/*????????????????*/
 		s->interrupt = net_recover;
 
-		/*???????????????*/
 		sim_sender_set_bitrates(s, s->sender, s->min_bitrate, s->start_bitrate, s->max_bitrate);
 
 		sim_info("sender actived!!!\n");
@@ -487,12 +497,8 @@ static void process_sim_pong(sim_session_t* s, sim_header_t* header, bin_stream_
 	sim_pong_t pong;
 	sim_decode_msg(strm, header, &pong);
 
-	int64_t now_ts = GET_SYS_MS();
-	uint32_t keep_rtt = 5;
-	if (now_ts > pong.ts + 5)
-		keep_rtt = (uint32_t)(now_ts - pong.ts);
-
-	sim_session_calculate_rtt(s, keep_rtt);
+	int64_t diff_ts = GET_SYS_MS() - pong.ts;
+	sim_session_calculate_rtt(s, SU_MAX(diff_ts, 5));
 }
 
 static void process_sim_seg(sim_session_t* s, sim_header_t* header, bin_stream_t* strm, su_addr* addr)
@@ -571,6 +577,7 @@ static void process_sim_fec(sim_session_t* s, sim_header_t* header, bin_stream_t
 		free(fec);
 }
 
+
 static void sim_session_process(sim_session_t* s, bin_stream_t* strm, su_addr* addr)
 {
 	sim_header_t header;
@@ -584,7 +591,7 @@ static void sim_session_process(sim_session_t* s, bin_stream_t* strm, su_addr* a
 	su_addr_to_addr(addr, &s->peer);
 	if (s->interrupt == net_interrupt){
 		s->interrupt = net_recover;
-		s->notify_cb(s->event, net_recover_notify, 0); /*??????????????§Ò???*/
+		s->notify_cb(s->event, net_recover_notify, 0); /* notify appcatio layer network recover */
 	}
 
 	s->resend = 0;
@@ -640,9 +647,9 @@ static void sim_session_process(sim_session_t* s, bin_stream_t* strm, su_addr* a
 	}
 }
 
+// touched every 1s
 static void sim_session_send_ping(sim_session_t* s, int64_t now_ts)
 {
-	//sim_info("sim_session_send_ping\n");
 	sim_header_t header;
 	sim_ping_t body;
 
@@ -650,7 +657,8 @@ static void sim_session_send_ping(sim_session_t* s, int64_t now_ts)
 	body.ts = now_ts;
 
 	sim_encode_msg(&s->sstrm, &header, &body);
-	sim_session_network_send(s, &s->sstrm);
+	int ret = sim_session_network_send(s, &s->sstrm);
+	assert(ret > 0);
 
 	s->commad_ts = now_ts;
 	s->resend++;
@@ -675,7 +683,7 @@ static void sim_session_state_timer(sim_session_t* s, int64_t now_ts, sim_sessio
 	uint32_t delay;
 	char info[SIM_INFO_SIZE];
 
-	if (s->stat_ts + 1000 < now_ts){
+	if (s->stat_ts + 1000 <= now_ts){
 		delay = (uint32_t)(now_ts - s->stat_ts) * 1024;
 		s->stat_ts = now_ts;
 
@@ -688,16 +696,23 @@ static void sim_session_state_timer(sim_session_t* s, int64_t now_ts, sim_sessio
 			cache_delay = sim_receiver_cache_delay(s, s->receiver);
 
 		if (s->state_cb != NULL){
-			sprintf(info, "video rate = %ukb/s, send = %ukb/s, recv = %ukb/s, rtt = %d + %dms, max frame = %u, pacer delay = %ums, cache delay = %ums",
-				(uint32_t)(s->video_bytes * 1000 * 8 / delay), (uint32_t)(s->sbandwidth * 1000 * 8 / delay), (uint32_t)(s->rbandwidth * 1000 * 8 / delay), 
-				s->rtt, s->rtt_var, s->max_frame_size, pacer_ms, cache_delay);
+			sprintf(info, "video rate=%ukb/s, send=%ukb/s, recv=%ukb/s, rtt=%d+%dms, max frame size =%uKB, pacer delay =%ums, cache delay=%ums lost=%.2f",
+					(uint32_t)(s->video_bytes * 1000 * 8 / delay), 
+					(uint32_t)(s->sbandwidth * 1000 * 8 / delay), 
+					(uint32_t)(s->rbandwidth * 1000 * 8 / delay), 
+					s->rtt, s->rtt_var, (s->max_frame_size >> 10), pacer_ms, cache_delay, (float)s->loss_fraction * 100/255);
 			s->state_cb(s->event, info);
 		}
 
 		if (s->sender != NULL){
 			sim_info("sim transport, send count = %u, recv count = %u, send bandwidth = %ukb/s, recv bandwidth = %ukb/s, rtt = %d, video rate = %ukb/s, pacer delay = %ums, loss=%u\n",
-				(uint32_t)(s->scount), (uint32_t)(s->rcount), (uint32_t)(s->sbandwidth * 1000 * 8 / delay),
-				(uint32_t)(s->rbandwidth * 1000 * 8 / delay), s->rtt + s->rtt_var, (uint32_t)(s->video_bytes * 1000 * 8 / delay), pacer_ms, s->loss_fraction);
+					(uint32_t)(s->scount), 
+					(uint32_t)(s->rcount), 
+					(uint32_t)(s->sbandwidth * 1000 * 8 / delay),
+					(uint32_t)(s->rbandwidth * 1000 * 8 / delay), 
+					s->rtt + s->rtt_var, 
+					(uint32_t)(s->video_bytes * 1000 * 8 / delay), 
+					pacer_ms, s->loss_fraction);
 		}
 
 		s->rbandwidth = 0;
@@ -708,13 +723,14 @@ static void sim_session_state_timer(sim_session_t* s, int64_t now_ts, sim_sessio
 		s->max_frame_size = 0;
 	}
 
-	if (s->commad_ts + tick_delay < now_ts){
+	if (s->commad_ts + tick_delay <= now_ts){
 		if (s->resend * tick_delay < 10000){
 			fn(s, now_ts);
-			if (s->resend == 2)
+			if (s->resend == 2) {
 				s->rtt += 500;
-		}
-		else{
+				sim_debug("sim_session_state_timer rtt=%u rttvar=%u\n", s->rtt, s->rtt_var);
+			}
+		} else {
 			if (s->receiver != NULL){
 				s->notify_cb(s->event, sim_stop_play_notify, s->receiver->base_uid);
 			}
@@ -725,6 +741,7 @@ static void sim_session_state_timer(sim_session_t* s, int64_t now_ts, sim_sessio
 	}
 }
 
+// every 5ms
 static void sim_session_heartbeat(sim_session_t* s, int64_t now_ts)
 {
 	if (s->receiver != NULL)
@@ -751,8 +768,3 @@ static void sim_session_heartbeat(sim_session_t* s, int64_t now_ts)
 	if (s->sender != NULL || s->receiver != NULL)
 		sim_session_state_timer(s, now_ts, sim_session_send_ping, sim_network_timout, TICK_DELAY_MS);
 }
-
-
-
-
-

@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 #include <list>
+#include <set>
 
 #define _DS_BEGIN	namespace ds {
 #define _DS_END		}
@@ -20,7 +21,36 @@
 
 _DS_BEGIN
 
+// Raw video types
+enum RawVideoType {
+  kVideoI420 = 0,
+  kVideoYV12 = 1,
+  kVideoYUY2 = 2,
+  kVideoUYVY = 3,
+  kVideoIYUV = 4,
+  kVideoARGB = 5,
+  kVideoRGB24 = 6,
+  kVideoRGB565 = 7,
+  kVideoARGB4444 = 8,
+  kVideoARGB1555 = 9,
+  kVideoMJPEG = 10,
+  kVideoNV12 = 11,
+  kVideoNV21 = 12,
+  kVideoBGRA = 13,
+  kVideoUnknown = 99
+};
 
+struct SDeviceCapability {
+	uint32_t width;
+	uint32_t height;
+	uint32_t maxFPS;
+	
+	RawVideoType rawType;
+
+	bool operator != (const SDeviceCapability& r) const {
+		return this->width != r.width || this->height != r.height || this->maxFPS != r.maxFPS;
+	}
+};
 
 struct SCaptureDevice
 {
@@ -30,6 +60,7 @@ struct SCaptureDevice
 	bool bVideo;
 	GUID guid;
 	CComPtr<IBaseFilter> pFilter;
+	std::vector<SDeviceCapability> capabilities;
 };
 
 struct SEffectInfo

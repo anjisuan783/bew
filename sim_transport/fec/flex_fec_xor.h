@@ -4,6 +4,8 @@
 #include "cf_platform.h"
 #include "sim_proto.h"
 
+#define ROW_COL_INDEX_ID 0x80
+
 int flex_fec_generate(sim_segment_t* segs[], int segs_count, sim_fec_t* fec);
 int flex_fec_recover(sim_segment_t* segs[], int segs_count, sim_fec_t* fec, sim_segment_t* out_seg);
 

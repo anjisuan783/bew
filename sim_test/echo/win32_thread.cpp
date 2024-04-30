@@ -6,6 +6,8 @@
 */
 
 #include "win32_thread.h"
+#include <limits>
+#include <stdint.h>
 
 CWin32_Thread::CWin32_Thread() : m_thread_handle(NULL), m_run_flag(false)
 {
@@ -15,6 +17,7 @@ CWin32_Thread::~CWin32_Thread()
 {
 	stop();
 }
+
 int CWin32_Thread::start()
 {
 	if(m_thread_handle != NULL)
@@ -50,21 +53,13 @@ void CWin32_Thread::stop()
 	m_thread_handle = NULL;
 }
 
-
 DWORD CWin32_Thread::thread_work(LPVOID lpData)
 {
 	CWin32_Thread *body = (CWin32_Thread *)lpData;
 
-	::CoInitialize(NULL);
-
-	if(body != NULL)
-	{
+	if(body != NULL) {
 		body->run();
-
 		return 1;
 	}
-	else
-		return 0;
-
-	::CoUninitialize();
+	return 0;
 }
