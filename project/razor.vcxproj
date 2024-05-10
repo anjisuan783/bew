@@ -94,6 +94,7 @@
     <ClCompile Include="..\common\cf_skiplist.c" />
     <ClCompile Include="..\common\cf_stream.c" />
     <ClCompile Include="..\common\cf_unwrapper.c" />
+    <ClCompile Include="..\common\exp_filter.cc" />
     <ClCompile Include="..\common\platform\windows\mscc.c" />
     <ClCompile Include="..\estimator\ack_bitrate_estimator.c" />
     <ClCompile Include="..\estimator\aimd_rate_control.c" />
@@ -141,6 +142,7 @@
     <ClInclude Include="..\common\cf_skiplist.h" />
     <ClInclude Include="..\common\cf_stream.h" />
     <ClInclude Include="..\common\cf_unwrapper.h" />
+    <ClInclude Include="..\common\exp_filter.h" />
     <ClInclude Include="..\estimator\ack_bitrate_estimator.h" />
     <ClInclude Include="..\estimator\aimd_rate_control.h" />
     <ClInclude Include="..\estimator\bitrate_controller.h" />

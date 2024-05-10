@@ -165,13 +165,13 @@ typedef struct
 
 	sim_fec_meta_t	fec_meta;
 
-	uint16_t		fec_data_size;
+	uint16_t		fec_data_size;  /* fec packet length, the max size of the segments */
 	uint8_t			fec_data[SIM_VIDEO_SIZE];
 }sim_fec_t;
 
-void							sim_encode_msg(bin_stream_t* strm, sim_header_t* header, void* body);
-int								sim_decode_header(bin_stream_t* strm, sim_header_t* header);
-int								sim_decode_msg(bin_stream_t* strm, sim_header_t* header, void* body);
-const char*						sim_get_msg_name(uint8_t msg_id);
+void sim_encode_msg(bin_stream_t* strm, sim_header_t* header, void* body);
+int sim_decode_header(bin_stream_t* strm, sim_header_t* header);
+int sim_decode_msg(bin_stream_t* strm, sim_header_t* header, void* body);
+const char* sim_get_msg_name(uint8_t msg_id);
 
 #endif

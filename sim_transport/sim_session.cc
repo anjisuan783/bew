@@ -8,6 +8,7 @@
 #include "sim_session.h"
 #include "sim_receiver.h"
 #include "sim_sender.h"
+#include "exp_filter.h"
 
 #include <assert.h>
 #include <time.h>
@@ -36,11 +37,14 @@ typedef void(*sim_session_processer)(sim_session_t* s, sim_header_t* header, bin
 
 #define MAX_TRY_TIME 100
 
+const float kValueLossFraction = 0.99f;
+const float kValueLossFractionMax = 1.0f;
+
 static sim_session_processer* process_fn[MAX_MSG_ID];
 
 sim_session_t* sim_session_create(uint16_t port, void* event, sim_notify_fn notify_cb, sim_change_bitrate_fn change_bitrate_cb, sim_state_fn state_cb)
 {
-	sim_session_t* s = calloc(1, sizeof(sim_session_t));
+	sim_session_t* s = (sim_session_t*)calloc(1, sizeof(sim_session_t));
 	s->scid = rand();
 	s->rcid = 0;
 	s->uid = 0;
@@ -75,6 +79,8 @@ sim_session_t* sim_session_create(uint16_t port, void* event, sim_notify_fn noti
 	s->mutex = su_create_mutex();
 	bin_stream_init(&s->sstrm);
 
+	s->exp_filter = new ExpFilter(kValueLossFraction, kValueLossFractionMax);
+
 	s->run = 1;
 	s->thr = su_create_thread(NULL, sim_session_loop_event, s);
 err:
@@ -102,6 +108,8 @@ void sim_session_destroy(sim_session_t* s)
 	bin_stream_destroy(&s->sstrm);
 	su_socket_destroy(s->s);
 
+	delete s->exp_filter;
+
 	free(s);
 }
 
@@ -120,6 +128,7 @@ static void sim_session_reset(sim_session_t* s)
 	s->scount = 0;
 	s->video_bytes = 0;
 	s->max_frame_size = 0;
+	s->fec_bytes = 0;
 
 	s->stat_ts = GET_SYS_MS();
 	s->resend = 0;
@@ -130,6 +139,8 @@ static void sim_session_reset(sim_session_t* s)
 	s->fec = 1;
 	
 	s->fir_seq = 0;
+
+	s->exp_filter->Reset(kValueLossFraction);
 
 	if (s->sender != NULL){
 		sim_sender_destroy(s, s->sender);
@@ -261,6 +272,8 @@ int sim_session_send_video(sim_session_t* s, uint8_t payload_type, uint8_t ftype
 
 	s->max_frame_size = SU_MAX(size, s->max_frame_size);
 
+	//sim_debug("sim_session_send_video, video size=%u\n", size);
+
 err:
 	su_mutex_unlock(s->mutex);
 	return ret;
@@ -328,7 +341,7 @@ void sim_session_calculate_rtt(sim_session_t* s, uint32_t keep_rtt)
 
 static void* sim_session_loop_event(void* arg)
 {
-	sim_session_t* s = arg;
+	sim_session_t* s = (sim_session_t*)arg;
 	bin_stream_t rstrm;
 	su_addr peer;
 	int rc;
@@ -566,7 +579,7 @@ static void process_sim_pad(sim_session_t* s, sim_header_t* header, bin_stream_t
 static void process_sim_fec(sim_session_t* s, sim_header_t* header, bin_stream_t* strm, su_addr* addr)
 {
 	sim_fec_t* fec;
-	fec = malloc(sizeof(sim_fec_t));
+	fec = (sim_fec_t*)malloc(sizeof(sim_fec_t));
 	if (sim_decode_msg(strm, header, fec) != 0){
 		free(fec);
 		return;
@@ -685,7 +698,7 @@ static void sim_session_state_timer(sim_session_t* s, int64_t now_ts, sim_sessio
 	char info[SIM_INFO_SIZE];
 
 	if (s->stat_ts + 1000 <= now_ts){
-		delay = (uint32_t)(now_ts - s->stat_ts) * 1024;
+		delay = (uint32_t)(now_ts - s->stat_ts) * 1000;
 
 		s->stat_ts = now_ts;
 
@@ -694,15 +707,21 @@ static void sim_session_state_timer(sim_session_t* s, int64_t now_ts, sim_sessio
 			pacer_ms = s->sender->cc->get_pacer_queue_ms(s->sender->cc);
 
 		uint32_t cache_delay = 0;
-		if (s->receiver)
+		uint32_t jitter_ts = 0;
+		uint32_t interval_ts = 0;
+		if (s->receiver) {
 			cache_delay = sim_receiver_cache_delay(s, s->receiver);
+			jitter_ts = s->receiver->cache->wait_timer;
+			interval_ts = s->receiver->cache->frame_timer;
+		}
 
 		if (s->state_cb != NULL){
-			sprintf(info, "video rate=%ukb/s, send=%ukb/s, recv=%ukb/s, rtt=%d+%dms, max frame size =%uKB, pacer delay =%ums, cache delay=%ums lost=%.2f",
+			sprintf(info, "video rate=%ukb/s, send=%ukb/s, recv=%ukb/s, fec=%ukb/s, rtt=%d+%dms, max frame size=%uKB, pacer delay=%ums, cache delay=%ums interval=%ums, jitter=%ums, lost=%.2f",
 					(uint32_t)(s->video_bytes * 1000 * 8 / delay), 
 					(uint32_t)(s->sbandwidth * 1000 * 8 / delay), 
 					(uint32_t)(s->rbandwidth * 1000 * 8 / delay), 
-					s->rtt, s->rtt_var, (s->max_frame_size >> 10), pacer_ms, cache_delay, (float)s->loss_fraction * 100/255);
+					(uint32_t)(s->fec_bytes * 1000 * 8 / delay), 
+					s->rtt, s->rtt_var, (s->max_frame_size >> 10), pacer_ms, cache_delay, interval_ts, jitter_ts, s->exp_filter->filtered()*100);
 			s->state_cb(s->event, info);
 		}
 
@@ -723,6 +742,7 @@ static void sim_session_state_timer(sim_session_t* s, int64_t now_ts, sim_sessio
 		s->rcount = 0;
 		s->video_bytes = 0;
 		s->max_frame_size = 0;
+		s->fec_bytes = 0;
 	}
 
 	if (s->commad_ts + tick_delay <= now_ts){

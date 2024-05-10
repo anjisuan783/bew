@@ -8,12 +8,12 @@
 
 flex_fec_sender_t* flex_fec_sender_create()
 {
-	flex_fec_sender_t* fec = calloc(1, sizeof(flex_fec_sender_t));
+	flex_fec_sender_t* fec = (flex_fec_sender_t*)calloc(1, sizeof(flex_fec_sender_t));
 	fec->seg_size = DEFAULT_SIZE;
-	fec->segs = calloc(1, sizeof(sim_segment_t*) * DEFAULT_SIZE);
+	fec->segs = (sim_segment_t**)calloc(1, sizeof(sim_segment_t*) * DEFAULT_SIZE);
 
 	fec->cache_size = DEFAULT_SIZE;
-	fec->cache = calloc(1, sizeof(sim_segment_t*) * DEFAULT_SIZE);
+	fec->cache = (sim_segment_t**)calloc(1, sizeof(sim_segment_t*) * DEFAULT_SIZE);
 	fec->fec_id = 1;
 	fec->first = 1;
 	return fec;
@@ -46,7 +46,7 @@ void flex_fec_sender_reset(flex_fec_sender_t* fec)
 	fec->segs_count = 0;
 }
 
-/*from small to big packet size, no duplicated*/
+/* unique packet size from small to big */
 void flex_fec_sender_add_segment(flex_fec_sender_t* fec, sim_segment_t* seg)
 {
 	int64_t now_ts = GET_SYS_MS();
@@ -74,7 +74,7 @@ void flex_fec_sender_add_segment(flex_fec_sender_t* fec, sim_segment_t* seg)
 		while(fec->segs_count >= fec->seg_size) {
 			fec->seg_size += DEFAULT_SIZE;
 		}
-		fec->segs = realloc(fec->segs, sizeof(sim_segment_t*) * fec->seg_size);
+		fec->segs = (sim_segment_t**)realloc(fec->segs, sizeof(sim_segment_t*) * fec->seg_size);
 	}
 	fec->segs[fec->segs_count++] = seg;
 }
@@ -177,7 +177,7 @@ int flex_fec_sender_update(flex_fec_sender_t* fec, const uint8_t protect_fractio
 				count = fec->segs_count - row_first;
 
 			if (count >= 1){
-				out = malloc(sizeof(sim_fec_t));
+				out = (sim_fec_t*)malloc(sizeof(sim_fec_t));
 
 				if (flex_fec_generate(&fec->segs[row_first], count, out) == 0){			
 					out->fec_id = fec->fec_id;
@@ -207,7 +207,7 @@ int flex_fec_sender_update(flex_fec_sender_t* fec, const uint8_t protect_fractio
 			if (fec->cache_size < fec->row){
 				while (fec->cache_size < fec->row)
 					fec->cache_size += DEFAULT_SIZE;
-				fec->cache = realloc(fec->cache, sizeof(sim_segment_t*) * fec->cache_size);
+				fec->cache = (sim_segment_t**)realloc(fec->cache, sizeof(sim_segment_t*) * fec->cache_size);
 			}
 
 			for (col = 0; col < fec->col; col++){
@@ -223,7 +223,7 @@ int flex_fec_sender_update(flex_fec_sender_t* fec, const uint8_t protect_fractio
 				}
 
 				if (count >= 1){
-					out = malloc(sizeof(sim_fec_t));
+					out = (sim_fec_t*)malloc(sizeof(sim_fec_t));
 
 					if (flex_fec_generate(fec->cache, count, out) == 0){
 						out->fec_id = fec->fec_id;
@@ -260,7 +260,7 @@ void flex_fec_sender_release(flex_fec_sender_t* fec, base_list_t* out_fecs)
 	sim_fec_t* packet;
 
 	LIST_FOREACH(out_fecs, iter){
-		packet = iter->pdata;
+		packet = (sim_fec_t*)iter->pdata;
 		if (packet != NULL)
 			free(packet);
 	}

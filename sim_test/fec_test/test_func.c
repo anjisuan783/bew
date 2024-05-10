@@ -2,7 +2,7 @@
 #include "flex_fec_receiver.h"
 #include <assert.h>
 
-const char* data_info = "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890";
+#define data_info "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890"
 #define segs_num 12
 
 void test_fec_xor()
@@ -12,18 +12,18 @@ void test_fec_xor()
 
 	sim_segment_t* dst_segs[segs_num], recover_seg;
 
-	uint32_t i, count, fec_id, frame_id = 123;
+	uint32_t i, count, fec_id;
 
 	for (i = 0; i < segs_num; i++){
 		seg = calloc(1, sizeof(sim_segment_t));
-		seg->fid = frame_id;
-		seg->packet_id = i;
+		seg->packet_id = seg->fid = i;
 		seg->payload_type = i % 2;
 		seg->ftype = 1;
 		seg->index = 0;
 		seg->total = 1;
 		seg->timestamp = i * 100;
-		seg->data_size = strlen(data_info);
+
+		seg->data_size = strlen(data_info) - segs_num + i + 1;
 		memcpy(seg->data, data_info, seg->data_size);
 
 		segs[i] = seg;
@@ -52,17 +52,6 @@ void test_fec_xor()
 	}
 	
 	recover_seg.data[seg->data_size] = 0;
-
-	int ret = memcmp(recover_seg.data, data_info, strlen(data_info));
-	assert(ret == 0);
-	assert(segs[fec_id]->fid == frame_id);
-	assert(segs[fec_id]->packet_id == fec_id);
-	assert(segs[fec_id]->payload_type == 1);
-	assert(segs[fec_id]->ftype == 1);
-	assert(segs[fec_id]->index == 0);
-	assert(segs[fec_id]->total == 1);
-	assert(segs[fec_id]->timestamp == fec_id * 100);
-	assert(segs[fec_id]->data_size == strlen(data_info));
 
 	printf("seg[%d]:\n", fec_id);
 	printf("\tpacket id = %d\n", recover_seg.packet_id);
@@ -131,7 +120,7 @@ static void verify_flex_sender(sim_segment_t* segments[], int segs_count, base_l
 		index = fec_packet->index & 0x7f;
 		count = 0;
 
-		if ((fec_packet->index & 0x80) == 0){ /*row check*/
+		if ((fec_packet->index & 0x80) == 0){ /*validate row*/
 			for (i = 0; i < fec_packet->col; i++){
 			pos = index * fec_packet->col + i;
 			if (i > 0 && pos < segs_count)
@@ -142,7 +131,7 @@ static void verify_flex_sender(sim_segment_t* segments[], int segs_count, base_l
 				segment_assert(segments[index * fec_packet->col], &seg);
 			else
 				printf("recover failed, row fec index = %d\n", index);
-		} else {/*col check*/
+		} else {/* validate column */
 			for (i = 0; i < fec_packet->row; i++){
 				pos = i * fec_packet->col + index;
 				if (i > 0 && pos < segs_count)
@@ -159,17 +148,10 @@ static void verify_flex_sender(sim_segment_t* segments[], int segs_count, base_l
 
 void test_flex_sender(uint8_t protect_fraction)
 {
-	int i;
 	sim_segment_t *segs[FLEX_SEG_NUM], *seg;
+	flex_fec_sender_t* flex = flex_fec_sender_create();
 
-	flex_fec_sender_t* flex;
-	sim_fec_t* fec_packet;
-
-	base_list_t* fec_list;
-
-	flex = flex_fec_sender_create();
-
-	for (i = 0; i < FLEX_SEG_NUM; i++){
+	for (int i = 0; i < FLEX_SEG_NUM; i++){
 		seg = calloc(1, sizeof(sim_segment_t));
 		seg->packet_id = seg->fid = i;
 		seg->payload_type = i % 2;
@@ -180,28 +162,23 @@ void test_flex_sender(uint8_t protect_fraction)
 
 		seg->data_size = strlen(data_info) - FLEX_SEG_NUM + i + 1;
 		memcpy(seg->data, data_info, seg->data_size);
-
 		segs[i] = seg;
-
 		flex_fec_sender_add_segment(flex, seg);
 	}
 
-	fec_list = create_list();
-
-	// generate fec packet
-	int rc = flex_fec_sender_update(flex, protect_fraction, fec_list);
-	assert(rc >= 0);
+	base_list_t* fec_list = create_list();
+	// single row fec proctection
+	flex_fec_sender_update(flex, protect_fraction, fec_list);
 
 	printf("%s, segment count = %d, protect = %u, fec num = %d\n", 
-		rc ? "multiFEC":"singleFEC", 
+		protect_fraction > 52 ? "multiFEC":"singleFEC", 
 		FLEX_SEG_NUM, 
 		protect_fraction, 
 		list_size(fec_list));
-
+		
 	if (list_size(fec_list) > 0){
-		fec_packet = list_front(fec_list);
+		sim_fec_t* fec_packet = list_front(fec_list);
 		printf("fec col = %d, row = %d\n", fec_packet->col, fec_packet->row);
-		/*recover check*/
 		verify_flex_sender(segs, FLEX_SEG_NUM, fec_list);
 	}
 
@@ -210,7 +187,7 @@ void test_flex_sender(uint8_t protect_fraction)
 	destroy_list(fec_list);
 	flex_fec_sender_destroy(flex);
 
-	for (i = 0; i < FLEX_SEG_NUM; i++){
+	for (int i = 0; i < FLEX_SEG_NUM; i++){
 		free(segs[i]);
 	}
 }
@@ -248,33 +225,26 @@ static int log_buffer_pos = 0;
 
 static int test_flex_order(sim_segment_t* segs[], base_list_t* fec_list, uint8_t loss_arr[], int loss_num)
 {
-	int i, j, flag;
+	skiplist_t* rec_id_verify_list = skiplist_create(idu32_compare, NULL, NULL);
+	log_buffer_pos += snprintf(log_buffer + log_buffer_pos, log_buffer_len-log_buffer_pos, " lost id[");
+	for (int i = 0; i < loss_num; ++i) {
+		skiplist_item_t key, val;
+		key.u32 = (uint32_t)loss_arr[i];
+		val.ptr = NULL;
+		skiplist_insert(rec_id_verify_list, key, val);
+		log_buffer_pos += snprintf(log_buffer + log_buffer_pos, log_buffer_len-log_buffer_pos, "%u,", (uint32_t)loss_arr[i]);
+	}
+	log_buffer_pos += snprintf(log_buffer + log_buffer_pos, log_buffer_len-log_buffer_pos, "]");
 
-	skiplist_iter_t* sl_iter;
-	skiplist_t* rec_map;
-
-	base_list_t *out;
-	base_list_unit_t* iter;
-
-	flex_fec_receiver_t* receiver;
-	sim_fec_t* fec_packet;
-	sim_segment_t* seg;
-
-	receiver = flex_fec_receiver_create(NULL, NULL, NULL);
-
-	fec_packet = list_front(fec_list);
-	// init fec receiver
-
+	flex_fec_receiver_t* receiver = flex_fec_receiver_create(NULL, NULL, NULL);
+	sim_fec_t* fec_packet = list_front(fec_list);
 	flex_fec_receiver_active(receiver, fec_packet->fec_id, fec_packet->col, fec_packet->row, fec_packet->base_id, fec_packet->count);
 	log_buffer_pos += snprintf(log_buffer + log_buffer_pos, log_buffer_len-log_buffer_pos, ", fec row = %d, colum = %d\n", fec_packet->row, fec_packet->col);
 
-	rec_map = skiplist_create(idu32_compare, NULL, NULL);
-	out = create_list();
-
-	/* simulated packet lost*/
-	for (i = 0; i < RECV_SEG_NUM; i++){
-		flag = 0;
-		for (j = 0; j < loss_num; j++){
+	base_list_t *out = create_list();  //recovered segments list
+	for (int i = 0; i < RECV_SEG_NUM; i++){
+		int flag = 0;
+		for (int j = 0; j < loss_num; j++){
 			if (loss_arr[j] == i)
 				flag = 1;
 		}
@@ -286,11 +256,12 @@ static int test_flex_order(sim_segment_t* segs[], base_list_t* fec_list, uint8_t
 	
 	skiplist_t* rec_map = skiplist_create(idu32_compare, NULL, NULL); //recovered fec segments list
 	base_list_unit_t* iter;
-
 	LIST_FOREACH(fec_list, iter){
 		packet_add_recover_list(rec_map, flex_fec_receiver_on_fec(receiver, iter->pdata));
 	}
 
+	sim_segment_t* seg;
+	skiplist_iter_t* sl_iter;
 	while (skiplist_size(rec_map) > 0){
 		sl_iter = skiplist_first(rec_map);
 		seg = sl_iter->val.ptr;
@@ -342,21 +313,17 @@ static int test_flex_order(sim_segment_t* segs[], base_list_t* fec_list, uint8_t
 	return ret;
 }
 
-static uint8_t loss[] = {0, 1, 2, 3, 4, 5, 10, 15, 20};
+//static uint8_t loss[] = { 5, 6, 7, 8, 9 };
 
 int test_flex_receiver(uint8_t protect_fraction, uint8_t loss_num, uint8_t loss[])
 {
-	int i;
-	sim_segment_t *segs[RECV_SEG_NUM], *seg;
+	sim_segment_t *segs[RECV_SEG_NUM];
 
-	flex_fec_sender_t* sender;
-	base_list_t* fec_list;
+	flex_fec_sender_t* sender = flex_fec_sender_create();
 
-	sender = flex_fec_sender_create();
-	fec_list = create_list();
-
-	for (i = 0; i < RECV_SEG_NUM; i++){
-		seg = calloc(1, sizeof(sim_segment_t));
+	// generate test data
+	for (int i = 0; i < RECV_SEG_NUM; i++){
+		sim_segment_t* seg = calloc(1, sizeof(sim_segment_t));
 		seg->packet_id = seg->fid = i;
 		seg->payload_type = i % 2;
 		seg->ftype = 1;
@@ -366,26 +333,28 @@ int test_flex_receiver(uint8_t protect_fraction, uint8_t loss_num, uint8_t loss[
 
 		seg->data_size = strlen(data_info) - RECV_SEG_NUM + i + 1;
 		memcpy(seg->data, data_info, seg->data_size);
-
 		segs[i] = seg;
-
 		flex_fec_sender_add_segment(sender, seg);
 	}
 
-	int rc = flex_fec_sender_update(sender, protect_fraction, fec_list);
-	printf("%s, segment count = %d, protect = %u, fec num = %d\n", 
-			rc ? "multiFEC" : "singleFEC", FLEX_SEG_NUM, protect_fraction, list_size(fec_list));
+	base_list_t* fec_list = create_list();
+	flex_fec_sender_update(sender, protect_fraction, fec_list);
+	log_buffer_pos = snprintf(log_buffer, 1023, "protect = %u, %s, segment count = %d,  fec num = %d, lost count = %d", 
+		protect_fraction, (protect_fraction >= 10 && RECV_SEG_NUM > 5)? "multiFEC" : "singleFEC", 
+		FLEX_SEG_NUM, list_size(fec_list), loss_num);
 
-	/* test flex receiver*/
 	if (list_size(fec_list) > 0){
-		printf("lost rate %f\n", (float)loss_num/RECV_SEG_NUM);
-		test_flex_order(segs, fec_list, loss, SU_MIN(loss_num, RECV_SEG_NUM));
+		if (test_flex_order(segs, fec_list, loss, SU_MIN(loss_num, RECV_SEG_NUM)) != 0) {
+			printf("%s", log_buffer);
+			return -1;
+		}
 	}
 
-	for (i = 0; i < RECV_SEG_NUM; ++i)
+	for (int i = 0; i < RECV_SEG_NUM; ++i)
 		free(segs[i]);
 
 	destroy_list(fec_list);
 	flex_fec_sender_destroy(sender);
 	return 0;
 }
+

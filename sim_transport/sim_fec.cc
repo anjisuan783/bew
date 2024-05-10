@@ -24,20 +24,20 @@ static void sim_receiver_fec_free_fec(sim_fec_t* fec, void* args)
 
 static void sim_receiver_fec_free_packet(skiplist_item_t key, skiplist_item_t val, void* args)
 {
-	sim_receiver_fec_free_segment(val.ptr, args);
+	sim_receiver_fec_free_segment((sim_segment_t*)val.ptr, args);
 }
 
 static void sim_receiver_free_flex(skiplist_item_t key, skiplist_item_t val, void* args)
 {
 	if (val.ptr != NULL)
-		flex_fec_receiver_desotry(val.ptr);
+		flex_fec_receiver_desotry((flex_fec_receiver_t*)val.ptr);
 }
 
 sim_receiver_fec_t* sim_fec_create(sim_session_t* s)
 {
 	sim_receiver_fec_t* f;
 
-	f = calloc(1, sizeof(sim_receiver_fec_t));
+	f = (sim_receiver_fec_t*)calloc(1, sizeof(sim_receiver_fec_t));
 	f->flexes = skiplist_create(idu16_compare, sim_receiver_free_flex, NULL);
 	f->segs_cache = skiplist_create(idu32_compare, sim_receiver_fec_free_packet, NULL);
 	f->recover_packets = skiplist_create(idu32_compare, sim_receiver_fec_free_packet, NULL);
@@ -130,10 +130,10 @@ static void sim_fec_add_segment_to_flex(sim_session_t* s, sim_receiver_fec_t* f,
 		iter = skiplist_search(f->segs_cache, key);
 		if (iter != NULL){
 			list_clear(f->out);
-			flex_fec_receiver_on_segment(flex, iter->val.ptr, f->out);
+			flex_fec_receiver_on_segment(flex, (sim_segment_t*)iter->val.ptr, f->out);
 			assert(list_size(f->out) == 0);
 			while (list_size(f->out) > 0)
-				sim_fec_packet_add_recover(s, f, list_pop(f->out));
+				sim_fec_packet_add_recover(s, f, (sim_segment_t*)list_pop(f->out));
 		}
 	}
 }
@@ -164,7 +164,7 @@ void sim_fec_put_fec_packet(sim_session_t* s, sim_receiver_fec_t* f, sim_fec_t* 
 		sim_fec_add_segment_to_flex(s, f, flex, fec);
 	}
 	else
-		flex = iter->val.ptr;
+		flex = (flex_fec_receiver_t*)iter->val.ptr;
 
 	sim_fec_packet_add_recover(s, f, flex_fec_receiver_on_fec(flex, fec));
 }
@@ -184,7 +184,7 @@ void sim_fec_put_segment(sim_session_t* s, sim_receiver_fec_t* f, sim_segment_t*
 
 	f->max_ts = SU_MAX(seg->timestamp, f->max_ts);
 
-	in_seg = malloc(sizeof(sim_segment_t));
+	in_seg = (sim_segment_t*)malloc(sizeof(sim_segment_t));
 	*in_seg = *seg;
 	val.ptr = in_seg;
 	skiplist_insert(f->segs_cache, key, val);
@@ -195,13 +195,13 @@ void sim_fec_put_segment(sim_session_t* s, sim_receiver_fec_t* f, sim_segment_t*
 		return;
 	 
 	list_clear(f->out);
-	flex_fec_receiver_on_segment(iter->val.ptr, in_seg, f->out);
+	flex_fec_receiver_on_segment((flex_fec_receiver_t*)iter->val.ptr, in_seg, f->out);
 	while (list_size(f->out) > 0)
-		sim_fec_packet_add_recover(s, f, list_pop(f->out));
+		sim_fec_packet_add_recover(s, f, (sim_segment_t*)list_pop(f->out));
 	
 	/*����Ѿ�����ˣ��ͷŵ�FEC����*/
-	if (flex_fec_receiver_full(iter->val.ptr) == 0){
-		sim_fec_evict_segment(s, f, iter->val.ptr);
+	if (flex_fec_receiver_full((flex_fec_receiver_t*)iter->val.ptr) == 0){
+		sim_fec_evict_segment(s, f, (flex_fec_receiver_t*)iter->val.ptr);
 		skiplist_remove(f->flexes, iter->key);
 	}
 }
@@ -221,7 +221,7 @@ void sim_fec_evict(sim_session_t* s, sim_receiver_fec_t* f, int64_t now_ts)
 
 	while (skiplist_size(f->flexes) > 0){
 		iter = skiplist_first(f->flexes);
-		flex = iter->val.ptr;
+		flex = (flex_fec_receiver_t*)iter->val.ptr;
 		if (flex->fec_ts + EVICT_FEC_DELAY <= f->max_ts || flex_fec_receiver_full(flex) == 0){
 			sim_fec_evict_segment(s, f, flex);
 			skiplist_remove(f->flexes, iter->key);
@@ -232,7 +232,7 @@ void sim_fec_evict(sim_session_t* s, sim_receiver_fec_t* f, int64_t now_ts)
 
 	while (skiplist_size(f->segs_cache) > 0){
 		iter = skiplist_first(f->segs_cache);
-		seg = iter->val.ptr;
+		seg = (sim_segment_t*)iter->val.ptr;
 		if (seg->timestamp + EVICT_FEC_DELAY * 2 < f->max_ts)
 			skiplist_remove(f->segs_cache, iter->key);
 		else

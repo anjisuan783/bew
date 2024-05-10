@@ -16,7 +16,7 @@ flex_fec_receiver_t* flex_fec_receiver_create(flex_segment_free_f seg_free, flex
 {
 	flex_fec_receiver_t* r = (flex_fec_receiver_t*)calloc(1, sizeof(flex_fec_receiver_t));
 	r->cache_size = k_default_cache_size;
-	r->cache = calloc(1, sizeof(sim_segment_t*) * k_default_cache_size);
+	r->cache = (sim_segment_t**)calloc(1, sizeof(sim_segment_t*) * k_default_cache_size);
 
 	r->segs = skiplist_create(idu32_compare, flex_free_segment, NULL);
 	r->fecs = skiplist_create(idu16_compare, flex_free_fec, NULL);
@@ -84,7 +84,7 @@ void flex_fec_receiver_active(flex_fec_receiver_t* r, uint16_t fec_id, uint8_t c
 	cache_size = SU_MAX(r->col, r->row);
 	if (r->cache_size < cache_size){
 		r->cache_size = (cache_size / k_default_cache_size + 1) * k_default_cache_size;
-		r->cache = realloc(r->cache, sizeof(sim_segment_t*)*r->cache_size);
+		r->cache = (sim_segment_t**)realloc(r->cache, sizeof(sim_segment_t*)*r->cache_size);
 	}
 }
 
@@ -123,7 +123,7 @@ static sim_segment_t* flex_recover_row(flex_fec_receiver_t* r, uint8_t row)
 		if (iter == NULL){
 			++loss; continue;  // segment lost
 		}
-		r->cache[count++] = iter->val.ptr;
+		r->cache[count++] = (sim_segment_t*)iter->val.ptr;
 	}
 
 	// 1.can't recover packet lost more than one of a row
@@ -138,8 +138,8 @@ static sim_segment_t* flex_recover_row(flex_fec_receiver_t* r, uint8_t row)
 		return seg;
 
 	/*free after processing*/
-	seg = malloc(sizeof(sim_segment_t));
-	if (flex_fec_recover(r->cache, count, iter->val.ptr, seg) != 0){
+	seg = (sim_segment_t*)malloc(sizeof(sim_segment_t));
+	if (flex_fec_recover(r->cache, count, (sim_fec_t*)iter->val.ptr, seg) != 0){
 		free(seg);
 		seg = NULL;
 	}
@@ -179,7 +179,7 @@ static sim_segment_t* flex_recover_col(flex_fec_receiver_t* r, uint8_t col)
 		if (iter == NULL){
 			loss++; continue; // lost
 		}
-		r->cache[count++] = iter->val.ptr;
+		r->cache[count++] = (sim_segment_t*)iter->val.ptr;
 	}
 	/*FEC can't recover*/
 	if (loss != 1 || count == 0)
@@ -190,8 +190,8 @@ static sim_segment_t* flex_recover_col(flex_fec_receiver_t* r, uint8_t col)
 	if (iter == NULL)  // no fec segment
 		return seg;
 
-	seg = malloc(sizeof(sim_segment_t));
-	if (flex_fec_recover(r->cache, count, iter->val.ptr, seg) != 0){
+	seg = (sim_segment_t*)malloc(sizeof(sim_segment_t));
+	if (flex_fec_recover(r->cache, count, (sim_fec_t*)iter->val.ptr, seg) != 0){
 		free(seg);
 		seg = NULL;
 	}

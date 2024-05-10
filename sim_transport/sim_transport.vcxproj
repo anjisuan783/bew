@@ -96,16 +96,16 @@
     <None Include="sim_proto.inl" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="fec\flex_fec_receiver.c" />
-    <ClCompile Include="fec\flex_fec_sender.c" />
-    <ClCompile Include="fec\flex_fec_xor.c" />
-    <ClCompile Include="sim_external.c" />
-    <ClCompile Include="sim_fec.c" />
-    <ClCompile Include="sim_limiter.c" />
-    <ClCompile Include="sim_proto.c" />
-    <ClCompile Include="sim_receiver.c" />
-    <ClCompile Include="sim_sender.c" />
-    <ClCompile Include="sim_session.c" />
+    <ClCompile Include="fec\flex_fec_receiver.cc" />
+    <ClCompile Include="fec\flex_fec_sender.cc" />
+    <ClCompile Include="fec\flex_fec_xor.cc" />
+    <ClCompile Include="sim_external.cc" />
+    <ClCompile Include="sim_fec.cc" />
+    <ClCompile Include="sim_limiter.cc" />
+    <ClCompile Include="sim_proto.cc" />
+    <ClCompile Include="sim_receiver.cc" />
+    <ClCompile Include="sim_sender.cc" />
+    <ClCompile Include="sim_session.cc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

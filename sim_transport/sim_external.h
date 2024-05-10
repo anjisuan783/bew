@@ -13,7 +13,7 @@
 #include <stdlib.h>
 
 #ifdef __cplusplus
-extern "C" {
+//extern "C" {
 #endif
 
 enum{
@@ -51,7 +51,7 @@ int			sim_recv_video(uint8_t* data, size_t* sizep, uint8_t* payload_type);
 void		sim_set_bitrates(uint32_t min_bitrate, uint32_t start_bitrate, uint32_t max_bitrate);
 
 #ifdef __cplusplus
-}
+//}
 #endif
 
 #endif

@@ -20,7 +20,7 @@ static inline int sim_connect_decode(bin_stream_t* strm, sim_connect_t* body)
 	body->token_size = mach_data_read(strm, body->token, SIM_TOKEN_SIZE);
 	if (body->token_size == READ_DATA_ERROR)
 		body->token_size = 0;
-	mach_int8_read(strm, &body->cc_type);
+	mach_int8_read(strm, (int8_t*)&body->cc_type);
 
 	return 0;
 }

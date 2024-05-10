@@ -26,6 +26,8 @@ typedef struct __sim_receiver sim_receiver_t;
 struct __sim_sender;
 typedef struct __sim_sender sim_sender_t;
 
+class ExpFilter;
+
 struct __sim_session
 {
 	su_socket		s;
@@ -68,6 +70,8 @@ struct __sim_session
 	uint64_t		video_bytes;
 	uint32_t		max_frame_size;		/*max frames in within a period*/
 
+	uint64_t  fec_bytes;
+
 	int				min_bitrate;		/*target min bitrate, unit: bps*/
 	int				max_bitrate;		/*target max bitrate, unit: bps*/
 	int				start_bitrate;		/*target start bitrate unit: bps*/
@@ -78,6 +82,7 @@ struct __sim_session
 	void*			event;
 
 	bin_stream_t	sstrm;
+	ExpFilter* exp_filter;
 };
 
 #define MIN_BITRATE		80000					/*80kbps*/

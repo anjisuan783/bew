@@ -46,45 +46,45 @@ void sim_encode_msg(bin_stream_t* strm, sim_header_t* header, void* body)
 	sim_encode_header(strm, header);
 	switch (header->mid){
 	case SIM_CONNECT:
-		sim_connect_encode(strm, body);
+		sim_connect_encode(strm, (sim_connect_t*)body);
 		break;
 
 	case SIM_CONNECT_ACK:
 	case SIM_DISCONNECT_ACK:
-		sim_connect_ack_encode(strm, body);
+		sim_connect_ack_encode(strm, (sim_connect_ack_t*)body);
 		break;
 
 	case SIM_DISCONNECT:
-		sim_disconnect_encode(strm, body);
+		sim_disconnect_encode(strm, (sim_disconnect_t*)body);
 		break;
 
 	case SIM_PING:
 	case SIM_PONG:
-		sim_ping_encode(strm, body);
+		sim_ping_encode(strm, (sim_ping_t*)body);
 		break;
 
 	case SIM_SEG:
-		sim_segment_encode(strm, body);
+		sim_segment_encode(strm, (sim_segment_t*)body);
 		break;
 
 	case SIM_SEG_ACK:
-		sim_segment_ack_encode(strm, body);
+		sim_segment_ack_encode(strm, (sim_segment_ack_t*)body);
 		break;
 
 	case SIM_FEEDBACK:
-		sim_feedbak_encode(strm, body);
+		sim_feedbak_encode(strm, (sim_feedback_t*)body);
 		break;
 
 	case SIM_FIR:
-		sim_fir_encode(strm, body);
+		sim_fir_encode(strm, (sim_fir_t*)body);
 		break;
 
 	case SIM_PAD:
-		sim_pad_encode(strm, body);
+		sim_pad_encode(strm, (sim_pad_t*)body);
 		break;
 
 	case SIM_FEC:
-		sim_fec_encode(strm, body);
+		sim_fec_encode(strm, (sim_fec_t*)body);
 		break;
 
 	default:
@@ -101,45 +101,45 @@ int sim_decode_msg(bin_stream_t* strm, sim_header_t* header, void* body)
 	int ret = -1;
 	switch (header->mid){
 	case SIM_CONNECT:
-		ret = sim_connect_decode(strm, body);
+		ret = sim_connect_decode(strm, (sim_connect_t*)body);
 		break;
 
 	case SIM_CONNECT_ACK:
 	case SIM_DISCONNECT_ACK:
-		ret = sim_connect_ack_decode(strm, body);
+		ret = sim_connect_ack_decode(strm, (sim_connect_ack_t*)body);
 		break;
 
 	case SIM_DISCONNECT:
-		ret = sim_disconnect_decode(strm, body);
+		ret = sim_disconnect_decode(strm, (sim_disconnect_t*)body);
 		break;
 
 	case SIM_PING:
 	case SIM_PONG:
-		ret = sim_ping_decode(strm, body);
+		ret = sim_ping_decode(strm, (sim_ping_t*)body);
 		break;
 
 	case SIM_SEG:
-		ret = sim_segment_decode(strm, body);
+		ret = sim_segment_decode(strm, (sim_segment_t*)body);
 		break;
 
 	case SIM_SEG_ACK:
-		ret = sim_segment_ack_decode(strm, body);
+		ret = sim_segment_ack_decode(strm, (sim_segment_ack_t*)body);
 		break;
 
 	case SIM_FEEDBACK:
-		ret = sim_feedbak_decode(strm, body);
+		ret = sim_feedbak_decode(strm, (sim_feedback_t*)body);
 		break;
 
 	case SIM_FIR:
-		ret = sim_fir_decode(strm, body);
+		ret = sim_fir_decode(strm, (sim_fir_t*)body);
 		break;
 
 	case SIM_PAD:
-		ret = sim_pad_decode(strm, body);
+		ret = sim_pad_decode(strm, (sim_pad_t*)body);
 		break;
 
 	case SIM_FEC:
-		ret = sim_fec_decode(strm, body);
+		ret = sim_fec_decode(strm, (sim_fec_t*)body);
 		break;
 
 	default:

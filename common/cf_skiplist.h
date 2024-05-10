@@ -10,6 +10,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define SKIPLIST_MAXDEPTH	8
 
 typedef union{
@@ -47,7 +51,7 @@ typedef struct
 
 	skiplist_compare_f	compare_fun;
 	skiplist_free_f		free_fun;
-	void*				args;					/*free¾ä±ú*/
+	void*				args;
 	skiplist_iter_t*	entries[SKIPLIST_MAXDEPTH];
 }skiplist_t;
 
@@ -68,6 +72,7 @@ skiplist_iter_t*		skiplist_first(skiplist_t* sl);
 #define SKIPLIST_FOREACH(sl, iter)	\
 	for(iter = sl->entries[0]; iter != NULL; iter = iter->next[0])
 
+
 int						id8_compare(skiplist_item_t k1, skiplist_item_t k2);
 int						id16_compare(skiplist_item_t k1, skiplist_item_t k2);
 int						id32_compare(skiplist_item_t k1, skiplist_item_t k2);
@@ -78,8 +83,8 @@ int						idu16_compare(skiplist_item_t k1, skiplist_item_t k2);
 int						idu32_compare(skiplist_item_t k1, skiplist_item_t k2);
 int						idu64_compare(skiplist_item_t k1, skiplist_item_t k2);
 
+#ifdef __cplusplus
+}
 #endif
 
-
-
-
+#endif

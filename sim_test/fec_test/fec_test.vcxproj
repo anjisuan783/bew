@@ -87,7 +87,7 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp" />
+    <ClCompile Include="main.c" />
     <ClCompile Include="test_func.c" />
   </ItemGroup>
   <ItemGroup>

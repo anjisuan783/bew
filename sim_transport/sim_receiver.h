@@ -23,10 +23,10 @@ typedef struct
 {
 	uint32_t			fid;  // frame id
 	uint32_t			last_seq;
-	uint32_t			ts;  //Relative time
+	uint32_t			ts;  // frame send ts
 	int					frame_type;  // I P
 
-	int					seg_count;
+	int					seg_count;   // received segs
 	int					seg_number;  // total segment count of one frame
 	sim_segment_t**		segments;
 }sim_frame_t;
@@ -34,26 +34,26 @@ typedef struct
 typedef struct __sim_frame_cache
 {
 	uint32_t			size;
-	uint32_t			min_seq;  // min sequeceid(packet id)
-	uint32_t			min_fid;  // min frame id(excluse self, begin from 0)
-	uint32_t			max_fid;  // max frame id(begin from 1)
-	uint32_t			play_frame_ts; // the playing frame(min frame ts, initial with first seg ts)
+	uint32_t			min_seq;  /* min sequeceid(packet id) */
+	uint32_t			min_fid;  /* min frame id(excluse self, begin from 0) */
+	uint32_t			max_fid;  /* max frame id(begin from 1) */
+	uint32_t			play_frame_ts; // last playing buffer cleaned ts 
 	uint32_t			max_ts;  // max segment timestamp
 
-	uint32_t			frame_ts;		//begin frame ts in buffer
-	uint64_t			play_ts;		/*The timestamp of the current system clock.*/
+	uint32_t			frame_ts;		/* playing ts, update ervery 5ms */
+	uint64_t			play_ts;		/* The timestamp of the current system clock.*/
 
-	uint32_t			frame_timer;	/*The interval between frames*/
-	uint32_t			wait_timer;		/*jitter buffer length，unit ms*/
+	uint32_t			frame_timer;	/* The interval between frames*/
+	uint32_t			wait_timer;		/* jitter length，unit ms*/
 
 	int					state;
 	int					loss_flag;
 
-	float				f;
+	float				f;  // play speed factor 1.0
 
 	skiplist_t*			discard_loss;
 
-	sim_frame_t*		frames; //ring buffer
+	sim_frame_t*		frames; //ring buffer for frame buffer, size = CACHE_SIZE
 }sim_frame_cache_t;
 
 typedef struct __sim_receiver
@@ -69,7 +69,7 @@ typedef struct __sim_receiver
 	sim_frame_cache_t*	cache;
 
 	uint64_t			ack_ts;        // last ack GET_SYS_MS
-	uint64_t			cache_ts;
+	uint64_t			cache_ts;      // jitter calculate timer
 	uint64_t			active_ts;
 
 	uint8_t				acked_count;

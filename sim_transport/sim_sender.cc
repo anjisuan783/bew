@@ -7,6 +7,8 @@
 
 #include "sim_sender.h"
 #include "sim_session.h"
+#include "exp_filter.h"
+
 #include <assert.h>
 
 #define MAX_SEND_COUNT		10
@@ -18,7 +20,7 @@ static void sim_bitrate_change(void* trigger, uint32_t bitrate, uint8_t fraction
 	sim_sender_t* sender = s->sender;
 
 	uint32_t overhead_bitrate, per_packets_second, payload_bitrate, video_bitrate_kbps;
-	double loss;
+	double loss;  // max 50%
 	uint32_t packet_size_bit = (SIM_SEGMENT_HEADER_SIZE + SIM_VIDEO_SIZE) * 8;
 
 	per_packets_second = (bitrate + packet_size_bit - 1) / packet_size_bit;
@@ -26,25 +28,25 @@ static void sim_bitrate_change(void* trigger, uint32_t bitrate, uint8_t fraction
 	overhead_bitrate = per_packets_second * SIM_SEGMENT_HEADER_SIZE * 8;
 	payload_bitrate = bitrate - overhead_bitrate;
 
-	if (fraction_loss < s->loss_fraction)
-		s->loss_fraction = (s->loss_fraction * 15 + fraction_loss) / 16;
-	else
-		s->loss_fraction = (fraction_loss + s->loss_fraction) / 2;
+	// fast increasing and slow dereasing
+	s->loss_fraction = (fraction_loss < s->loss_fraction) ? (s->loss_fraction * 15 + fraction_loss) >> 4 : 
+                      (fraction_loss + s->loss_fraction) >> 1;
 
-	loss = s->loss_fraction / 255.0;
+	loss = SU_MIN(s->loss_fraction / 255.0, 0.5);
 
-	if (loss > 0.5) 
-		loss = 0.5;
+	s->exp_filter->Apply(1.0, loss);
 
 	video_bitrate_kbps = (uint32_t)((1.0 - loss) * payload_bitrate) / 1000;
 
+	// TODO (20% bandwidth for fec is not a good idea, dynamic fec bitrate is better)
+	#pragma message ("20% bandwidth for fec is not a good idea, dynamic fec bitrate is better.")
 	if (sender->flex != NULL)
 		video_bitrate_kbps = video_bitrate_kbps * 4 / 5;
 
-	/*sim_info("loss = %f, bitrate = %u, video_bitrate_kbps = %u\n", loss, bitrate, video_bitrate_kbps);*/
 	s->change_bitrate_cb(s->event, video_bitrate_kbps, loss > 0 ? 1 : 0);
 
-	//sim_debug("bitrate = %ukb/s, video_bitrate_kbps = %ukb/s lost = %f fraction_loss=%u\n", bitrate / 8000, video_bitrate_kbps / 8, loss * 100, fraction_loss);
+	sim_debug("bitrate = %ukb/s, video_bitrate_kbps = %ukb/s lost = %f fraction_loss=%u\n", 
+			bitrate / 1000, video_bitrate_kbps, loss * 100, fraction_loss);
 }
 
 static void sim_send_packet(void* handler, uint32_t send_id, int fec, size_t size, int padding)
@@ -81,7 +83,7 @@ static void sim_send_packet(void* handler, uint32_t send_id, int fec, size_t siz
 			return;
 		}
 
-		sim_segment_t* seg = it->val.ptr;
+		sim_segment_t* seg = (sim_segment_t*)it->val.ptr;
 		seg->transport_seq = sender->transport_seq_seed++;
 		seg->send_ts = (uint16_t)(now_ts - sender->first_ts - seg->timestamp);
 
@@ -101,7 +103,7 @@ static void sim_send_packet(void* handler, uint32_t send_id, int fec, size_t siz
 			sim_debug("send fec to network failed, send_id = %u\n", send_id);
 			return;
 		}
-		sim_fec_t* fec_packet = it->val.ptr;
+		sim_fec_t* fec_packet = (sim_fec_t*)it->val.ptr;
 		fec_packet->transport_seq = sender->transport_seq_seed++;
 		fec_packet->send_ts = (uint32_t)(now_ts - sender->first_ts);
 
@@ -124,7 +126,7 @@ static void free_video_seg(skiplist_item_t key, skiplist_item_t val, void* args)
 sim_sender_t* sim_sender_create(sim_session_t* s, int transport_type, int padding, int fec)
 {
 	int cc_type;
-	sim_sender_t* sender = calloc(1, sizeof(sim_sender_t));
+	sim_sender_t* sender = (sim_sender_t*)calloc(1, sizeof(sim_sender_t));
 	sender->first_ts = -1;
 
 	sender->fecs_cache = skiplist_create(idu32_compare, free_video_seg, s);
@@ -284,13 +286,14 @@ static void sim_sender_fec(sim_session_t* s, sim_sender_t* sender)
 	skiplist_item_t key, val;
 	sim_fec_t* fec;
 	while (list_size(sender->out_fecs) > 0) {
-		fec = list_pop(sender->out_fecs);
+		fec = (sim_fec_t*)list_pop(sender->out_fecs);
 		if (fec != NULL) {
 			key.u32 = ++sender->send_id_seed;
 			val.ptr = fec;
 			skiplist_insert(sender->fecs_cache, key, val);
 			fec->send_ts = (uint32_t)(GET_SYS_MS() - sender->first_ts);
 
+      s->fec_bytes += fec->fec_data_size;
 			sender->cc->add_packet(sender->cc, key.u32, 1, fec->fec_data_size + SIM_SEGMENT_HEADER_SIZE);
 		}
 	}
@@ -317,7 +320,7 @@ int sim_sender_put(sim_session_t* s, sim_sender_t* sender, uint8_t payload_type,
 	++sender->frame_id_seed;
 	sim_segment_t* seg;
 	for (uint16_t i = 0; i < total; ++i) {
-		seg = malloc(sizeof(sim_segment_t));
+		seg = (sim_segment_t*)malloc(sizeof(sim_segment_t));
 
 		seg->packet_id = ++sender->packet_id_seed;
 		seg->send_id = ++sender->send_id_seed;
@@ -371,7 +374,7 @@ static inline void sim_sender_update_base(sim_session_t* s, sim_sender_t* sender
 		sender->base_packet_id = base_packet_id;
 		while (skiplist_size(sender->ack_cache) > 0) {
 			iter = skiplist_first(sender->ack_cache);
-			seg = iter->val.ptr;
+			seg = (sim_segment_t*)iter->val.ptr;
 			if (seg->packet_id > sender->base_packet_id)
 				break;
 			skiplist_remove(sender->ack_cache, iter->key);
@@ -485,7 +488,7 @@ static void sim_sender_evict_cache(sim_session_t* s, sim_sender_t* sender, int64
 
 	while (skiplist_size(sender->segs_cache) > 0){
 		iter = skiplist_first(sender->segs_cache);
-		seg = iter->val.ptr;
+		seg = (sim_segment_t*)iter->val.ptr;
 		if (seg->timestamp + sender->first_ts + MAX_CACHE_DELAY <= now_ts){
 			key.u32 = seg->packet_id;
 			skiplist_remove(sender->ack_cache, key);
@@ -497,7 +500,7 @@ static void sim_sender_evict_cache(sim_session_t* s, sim_sender_t* sender, int64
 
 	while (skiplist_size(sender->fecs_cache) > 0){
 		iter = skiplist_first(sender->fecs_cache);
-		fec = iter->val.ptr;
+		fec = (sim_fec_t*)iter->val.ptr;
 		if (fec->send_ts + sender->first_ts + MAX_CACHE_DELAY / 3 < now_ts)
 			skiplist_remove(sender->fecs_cache, iter->key);
 		else

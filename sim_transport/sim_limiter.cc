@@ -14,7 +14,7 @@ void sim_limiter_init(sim_sender_limiter_t* limiter, int windows_size_ms)
 {
 	limiter->wnd_size = windows_size_ms;
 	limiter->threshold = MAX_LIMITER_RATE * windows_size_ms / (1000 * 8);
-	limiter->buckets = calloc(limiter->wnd_size, sizeof(uint32_t));
+	limiter->buckets = (uint32_t*)calloc(limiter->wnd_size, sizeof(uint32_t));
 	limiter->index = 0;
 	limiter->wnd_bytes = 0;
 	limiter->oldest_ts = -1;

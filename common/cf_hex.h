@@ -10,9 +10,17 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 char* wb_bin2asc(const uint8_t *in, int32_t in_size, char* out, int32_t out_size);
 
 void wb_asc2bin(const char* in, int32_t in_size, uint8_t* out, int32_t out_size, int32_t* out_length);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 

@@ -16,6 +16,10 @@
 #define READ_DATA_ERROR		0xffff
 #define MAX_MTU_SIZE		1476
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct bin_stream_s
 {
 	uint8_t*	data;
@@ -81,6 +85,8 @@ uint32_t	mach_get_4(uint8_t* ptr);
 void		mach_put_8(uint8_t* ptr, uint64_t val);
 uint64_t	mach_get_8(uint8_t* ptr);
 
+#ifdef __cplusplus
+}
 #endif
 
-
+#endif
