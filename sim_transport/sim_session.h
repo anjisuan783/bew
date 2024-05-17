@@ -27,6 +27,8 @@ struct __sim_sender;
 typedef struct __sim_sender sim_sender_t;
 
 class ExpFilter;
+class CallStats;
+class Clock;
 
 struct __sim_session
 {
@@ -40,6 +42,8 @@ struct __sim_session
 
 	uint32_t		rtt;
 	uint32_t		rtt_var;			/*smooth rtt*/
+	CallStats*      stats;
+
 	uint8_t			loss_fraction;		/* 0 ~ 255  100% = 255*/
 	uint32_t		fir_seq;
 
@@ -83,6 +87,8 @@ struct __sim_session
 
 	bin_stream_t	sstrm;
 	ExpFilter* exp_filter;
+
+	Clock* clock;
 };
 
 #define MIN_BITRATE		80000					/*80kbps*/
@@ -107,7 +113,7 @@ void sim_session_set_bitrates(sim_session_t* s, uint32_t min_bitrate, uint32_t s
 // api sendto wrapper
 int sim_session_network_send(sim_session_t* s, bin_stream_t* strm);
 
-void sim_session_calculate_rtt(sim_session_t* s, uint32_t keep_rtt);
+void sim_session_calculate_rtt(sim_session_t* s, uint32_t keep_rtt, int64_t now);
 
 
 void ex_sim_log(int level, const char* file, int line, const char *fmt, ...);

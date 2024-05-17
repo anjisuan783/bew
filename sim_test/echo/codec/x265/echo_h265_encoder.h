@@ -15,15 +15,11 @@ class H265Encoder : public VideoEncoder
 {
 public:
 	H265Encoder();
-	virtual ~H265Encoder();
+	~H265Encoder() override;
 
-	bool encode(uint8_t *in, int in_size, enum PixelFormat pix_fmt, uint8_t *out, int *out_size, int *frame_type, bool request_keyframe = false) override;
+	bool encode(uint8_t *in, enum PixelFormat pix_fmt, uint8_t *out, int *out_size, int *frame_type, bool request_keyframe = false) override;
 
 	int get_bitrate() const override;
-
-	//int get_codec_width() const;
-	//int get_codec_height() const;
-
 protected:
 	void config_param();
 	void reconfig_encoder(uint32_t bitrate) override;

@@ -47,7 +47,7 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WEBRTC_WIN;WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\common;..\estimator;..\pacing;..\cc;..\bbr;..\remb;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
@@ -63,7 +63,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WEBRTC_WIN;WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\common;..\estimator;..\pacing;..\cc;..\bbr;..\remb;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
@@ -94,6 +94,7 @@
     <ClCompile Include="..\common\cf_skiplist.c" />
     <ClCompile Include="..\common\cf_stream.c" />
     <ClCompile Include="..\common\cf_unwrapper.c" />
+    <ClCompile Include="..\common\clock.cc" />
     <ClCompile Include="..\common\exp_filter.cc" />
     <ClCompile Include="..\common\platform\windows\mscc.c" />
     <ClCompile Include="..\estimator\ack_bitrate_estimator.c" />
@@ -142,6 +143,7 @@
     <ClInclude Include="..\common\cf_skiplist.h" />
     <ClInclude Include="..\common\cf_stream.h" />
     <ClInclude Include="..\common\cf_unwrapper.h" />
+    <ClInclude Include="..\common\clock.h" />
     <ClInclude Include="..\common\exp_filter.h" />
     <ClInclude Include="..\estimator\ack_bitrate_estimator.h" />
     <ClInclude Include="..\estimator\aimd_rate_control.h" />

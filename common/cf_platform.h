@@ -20,10 +20,6 @@
 
 #define snprintf _snprintf
 
-#ifndef inline
-#define	inline __inline
-#endif
-
 #else
 #include <sys/socket.h>
 #include <netinet/in.h>

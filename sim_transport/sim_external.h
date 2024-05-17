@@ -41,7 +41,7 @@ typedef void(*sim_state_fn)(void* event, const char* info);
 void		sim_init(uint16_t port, void* event, sim_log_fn log_cb, sim_notify_fn notify_cb, sim_change_bitrate_fn change_bitrate_cb, sim_state_fn state_cb);
 void		sim_destroy();
 
-/*transport_type, 0:GCC£¬1:BBR*/
+/*transport_type, 0:GCC 1:BBR*/
 int			sim_connect(uint32_t local_uid, const char* peer_ip, uint16_t peer_port, int transport_type, int padding, int fec);
 int			sim_disconnect();
 

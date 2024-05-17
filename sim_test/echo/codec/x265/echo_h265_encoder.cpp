@@ -15,15 +15,6 @@ H265Encoder::H265Encoder()
 	en_h_ = NULL;
 	en_param_ = NULL;
 
-	src_width_ = PIC_WIDTH_640;
-	src_height_ = PIC_HEIGHT_480;
-
-	frame_rate_ = DEFAULT_FRAME_RATE;
-
-	max_resolution_ = VIDEO_480P;
-	curr_resolution_ = VIDEO_480P;
-	bitrate_kbps_ = 640;
-
 	buff_ = NULL;
 	buff_size_ = 0;
 }
@@ -109,17 +100,7 @@ int H265Encoder::get_bitrate() const
 {
 	return en_param_->rc.vbvMaxBitrate;
 }
-/*
-int H265Encoder::get_codec_width() const
-{
-	return resolution_infos[curr_resolution_].codec_width;
-}
 
-int H265Encoder::get_codec_height() const
-{
-	return resolution_infos[curr_resolution_].codec_height;
-}
-*/
 void H265Encoder::reconfig_encoder(uint32_t bitrate_kbps)
 {
 	const encoder_resolution_t& res = resolution_infos[curr_resolution_];
@@ -186,7 +167,7 @@ void H265Encoder::config_param()
 	en_param_->bEnableRectInter = 1;
 }
 
-bool H265Encoder::encode(uint8_t *in, int in_size, enum PixelFormat pix_fmt, uint8_t *out, int *out_size, int *frame_type, bool request_keyframe)
+bool H265Encoder::encode(uint8_t *in, enum PixelFormat pix_fmt, uint8_t *out, int *out_size, int *frame_type, bool request_keyframe)
 {
 	int rc;
 	bool ret = false;

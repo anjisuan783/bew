@@ -8,6 +8,27 @@
 #include "codec_common.h"
 #include <assert.h>
 
+#define PIC_WIDTH_160	160
+#define PIC_HEIGHT_120	120
+
+#define PIC_WIDTH_320	320
+#define PIC_HEIGHT_240	240
+
+#define PIC_WIDTH_480	480
+#define PIC_HEIGHT_360	360
+
+#define PIC_WIDTH_640	640
+#define PIC_HEIGHT_480	480
+
+#define PIC_WIDTH_960	800
+#define PIC_HEIGHT_640	600
+
+#define PIC_WIDTH_1280	1280
+#define PIC_HEIGHT_720	720
+
+#define PIC_WIDTH_1920	1920
+#define PIC_HEIGHT_1080 1080
+
 const encoder_resolution_t h264_resolution_infos[RESOLUTIONS_NUMBER] = {
 	{ VIDEO_120P, PIC_WIDTH_160, PIC_HEIGHT_120, 86, 32, 48 },
 	{ VIDEO_240P, PIC_WIDTH_320, PIC_HEIGHT_240, 256, 80, 120 },
@@ -43,6 +64,26 @@ encoder_resolution_t resolution_infos[RESOLUTIONS_NUMBER];
 
 extern int frame_log(int level, const char* file, int line, const char *fmt, ...);
 
+AVPixelFormat FFMpegCS(VSampleFormat nCS)
+{
+	if (VSampleFormat_BGRA == nCS)
+		return AV_PIX_FMT_BGRA;
+
+	if (VSampleFormat_RGB == nCS)
+		return AV_PIX_FMT_BGR24;
+
+	if (VSampleFormat_I420 == nCS)
+		return AV_PIX_FMT_YUV420P;
+
+	assert(false);
+	return AV_PIX_FMT_NONE;
+}
+
+inline int FFMpegPicBufLen(int nDstWidth, int nDstHeight, VSampleFormat cs)
+{
+	return av_image_get_buffer_size(FFMpegCS(cs), nDstWidth, nDstHeight, 16);
+}
+
 void setup_codec(int codec_id)
 {
 	switch (codec_id){
@@ -65,15 +106,14 @@ void setup_codec(int codec_id)
 VideoEncoder::VideoEncoder()
 {
 	inited_ = false;
+	curr_resolution_ = max_resolution_ = VIDEO_480P;
 
-	src_width_ = PIC_WIDTH_640;
-	src_height_ = PIC_HEIGHT_480;
+	src_width_ = h264_resolution_infos[curr_resolution_].codec_width;
+	src_height_ = h264_resolution_infos[curr_resolution_].codec_height;
 
 	frame_rate_ = DEFAULT_FRAME_RATE;
-	max_resolution_ = VIDEO_480P;
-	curr_resolution_ = VIDEO_480P;
 
-	bitrate_kbps_ = 800000;
+	bitrate_kbps_ = h264_resolution_infos[curr_resolution_].max_rate;
 
 	inited_ = false;
 	frame_index_ = 0;
@@ -172,13 +212,12 @@ int VideoEncoder::find_resolution(uint32_t birate_kpbs)
 
 void VideoEncoder::try_change_resolution()
 {
-	/*判断下一帧处在gop的位置, 如果处于后半段，我们可以尝试改变分辨率*/
 	uint32_t frame_index = (frame_index_ + 1) % (frame_rate_ * KEY_FRAME_SEC);
 	const encoder_resolution_t& res = resolution_infos[curr_resolution_];
 	if (res.min_rate > bitrate_kbps_ && curr_resolution_ > VIDEO_120P){
-		/*降低一层分辨率*/
+
 		int32_t rate_stat_kps = rate_stat_rate(&rate_stat_, GET_SYS_MS()) / 1000;
-		if (rate_stat_kps < res.min_rate * 7 / 8) /*产生数据的带宽小于最小限制带宽，不做改动*/
+		if (rate_stat_kps < res.min_rate * 7 / 8)
 			return;
 
 		curr_resolution_ = find_resolution(bitrate_kbps_);
@@ -192,7 +231,7 @@ void VideoEncoder::try_change_resolution()
 	}
 	else if (frame_index >= (KEY_FRAME_SEC * frame_rate_ / 2) && res.max_rate < bitrate_kbps_ && curr_resolution_ + 1 <= max_resolution_
 		&& up_ts_ + 10000 < GET_SYS_MS()){
-		/*升高一层分辨率*/
+
 		curr_resolution_ = find_resolution(bitrate_kbps_);
 		close_encoder();
 		open_encoder();
@@ -206,6 +245,7 @@ void VideoEncoder::try_change_resolution()
 
 /***********************************************************************************************************/
 #define BUFF_SIZE (256 * 1024)
+
 VideoDecoder::VideoDecoder()
 {
 	inited_ = false;
@@ -235,10 +275,12 @@ VideoDecoder::~VideoDecoder()
 	}
 }
 
-bool VideoDecoder::init()
+bool VideoDecoder::init(VSampleFormat dst_fmt)
 {
 	if (inited_)
 		return false;
+	
+	fmt_ = dst_fmt;
 
 	avcodec_register_all();
 
@@ -313,8 +355,9 @@ bool VideoDecoder::decode(uint8_t *in, int in_size, uint8_t **out, int &out_widt
 		curr_width_ = de_frame_->width;
 		curr_height_ = de_frame_->height;
 
-		if (curr_height_ * curr_width_ * 3 + 10 > buff_size_){
-			buff_size_ = curr_height_ * curr_width_ * 3 + 10;
+		int buf_size = FFMpegPicBufLen(curr_width_, curr_height_, fmt_);
+		if (nullptr == buff_ || buf_size > buff_size_){
+			buff_size_ = buf_size;
 			buff_ = (uint8_t*)realloc(buff_, buff_size_);
 		}
 
@@ -322,12 +365,12 @@ bool VideoDecoder::decode(uint8_t *in, int in_size, uint8_t **out, int &out_widt
 			sws_freeContext(sws_context_);
 
 		// No scale here, so use the same width and height
-		sws_context_ = sws_getContext(curr_width_, curr_height_, PIX_FMT_YUV420P,
-			curr_width_, curr_height_, PIX_FMT_BGR24, SWS_FAST_BILINEAR, NULL, NULL, NULL);
+		sws_context_ = sws_getContext(curr_width_, curr_height_, de_context_->pix_fmt,
+			curr_width_, curr_height_, FFMpegCS(fmt_), SWS_FAST_BILINEAR, NULL, NULL, NULL);
 	}
 
 	if (sws_context_ != NULL){
-		avpicture_fill(&outpic_, buff_, PIX_FMT_RGB24, curr_width_, curr_height_);
+		avpicture_fill(&outpic_, buff_, FFMpegCS(fmt_), curr_width_, curr_height_);
 		//YUV -> RGB, No scale
 		out_size = sws_scale(sws_context_, de_frame_->data, de_frame_->linesize, 0,
 			de_context_->height, outpic_.data, outpic_.linesize);

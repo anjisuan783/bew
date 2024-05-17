@@ -10,7 +10,6 @@
 
 #include "codec_common.h"
 
-/*H265������*/
 class H265Decoder : public VideoDecoder
 {
 public:

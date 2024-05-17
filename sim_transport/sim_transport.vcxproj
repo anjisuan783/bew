@@ -82,9 +82,11 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="call_stats.h" />
     <ClInclude Include="fec\flex_fec_receiver.h" />
     <ClInclude Include="fec\flex_fec_sender.h" />
     <ClInclude Include="fec\flex_fec_xor.h" />
+    <ClInclude Include="jitter_buffer.h" />
     <ClInclude Include="sim_external.h" />
     <ClInclude Include="sim_fec.h" />
     <ClInclude Include="sim_proto.h" />
@@ -96,9 +98,11 @@
     <None Include="sim_proto.inl" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="call_stats.cc" />
     <ClCompile Include="fec\flex_fec_receiver.cc" />
     <ClCompile Include="fec\flex_fec_sender.cc" />
     <ClCompile Include="fec\flex_fec_xor.cc" />
+    <ClCompile Include="jitter_buffer.cc" />
     <ClCompile Include="sim_external.cc" />
     <ClCompile Include="sim_fec.cc" />
     <ClCompile Include="sim_limiter.cc" />

@@ -178,8 +178,9 @@ BOOL CechoDlg::OnInitDialog()
 
 	m_iUser = rand() % 10000 + 1000;
 
-	m_srcVideo.SetWindowPos(NULL, 0, 0, PIC_WIDTH_480, PIC_HEIGHT_360, SWP_NOMOVE);
-	m_dstVideo.SetWindowPos(NULL, 0, 0, PIC_WIDTH_480, PIC_HEIGHT_360, SWP_NOMOVE);
+
+	//m_srcVideo.SetWindowPos(NULL, 0, 0, 680, 480, SWP_NOMOVE);
+	//m_dstVideo.SetWindowPos(NULL, 0, 0, 640, 480, SWP_NOMOVE);
 
 	InitVideoDevices();
 
@@ -384,7 +385,7 @@ void CechoDlg::OnBnClickedBtnview()
 
 		video_info_t info;
 		info.pix_format = RGB24;
-		info.rate = 30;
+		info.rate = 0;
 		info.codec = GetCodec();
 		info.width = resolution_infos[i].codec_width;
 		info.height = resolution_infos[i].codec_height;
@@ -399,8 +400,8 @@ void CechoDlg::OnBnClickedBtnview()
 		m_strDev.ReleaseBuffer();
 		m_viRecorder->open();
 
-		m_dstVideo.GetClientRect(&display_rect);
-		m_viPlayer = new CFVideoPlayer(m_dstVideo.GetSafeHwnd(), display_rect);
+		//m_dstVideo.GetClientRect(&display_rect);
+		m_viPlayer = new CFVideoPlayer(m_dstVideo.GetSafeHwnd());
 		m_viPlayer->open();
 
 		m_btnView.SetWindowText(_T("stop view"));
@@ -461,8 +462,7 @@ void CechoDlg::OnBnClickedBtnconnect()
 		}
 
 		m_strIP.ReleaseBuffer();
-	}
-	else{
+	} else {
 		CloseAll();
 	}
 }
@@ -488,7 +488,7 @@ LRESULT CechoDlg::OnConnectSucc(WPARAM wparam, LPARAM lparam)
 
 	video_info_t info;
 	info.pix_format = RGB24;
-	info.rate = 30;
+	info.rate = 0;
 	info.codec = GetCodec();
 	info.width = resolution_infos[i].codec_width;
 	info.height = resolution_infos[i].codec_height;
@@ -572,9 +572,9 @@ LRESULT CechoDlg::OnStartPlay(WPARAM wparam, LPARAM lparam)
 	m_strInfo += data;
 	UpdateData(FALSE);
 
-	RECT display_rect;
-	m_dstVideo.GetClientRect(&display_rect);
-	m_viPlayer = new CFVideoPlayer(m_dstVideo.GetSafeHwnd(), display_rect);
+	//RECT display_rect;
+	//m_dstVideo.GetClientRect(&display_rect);
+	m_viPlayer = new CFVideoPlayer(m_dstVideo.GetSafeHwnd());
 	m_viPlayer->open();
 
 	m_frame->start_player(uid, m_viPlayer);

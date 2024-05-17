@@ -15,7 +15,7 @@ void test_fec_xor()
 	uint32_t i, count, fec_id;
 
 	for (i = 0; i < segs_num; i++){
-		seg = calloc(1, sizeof(sim_segment_t));
+		seg = (sim_segment_t*)calloc(1, sizeof(sim_segment_t));
 		seg->packet_id = seg->fid = i;
 		seg->payload_type = i % 2;
 		seg->ftype = 1;
@@ -115,7 +115,7 @@ static void verify_flex_sender(sim_segment_t* segments[], int segs_count, base_l
 	int i, index, count, pos;
 
 	LIST_FOREACH(l, iter){
-		fec_packet = iter->pdata;
+		fec_packet = (sim_fec_t*)iter->pdata;
 
 		index = fec_packet->index & 0x7f;
 		count = 0;
@@ -152,7 +152,7 @@ void test_flex_sender(uint8_t protect_fraction)
 	flex_fec_sender_t* flex = flex_fec_sender_create();
 
 	for (int i = 0; i < FLEX_SEG_NUM; i++){
-		seg = calloc(1, sizeof(sim_segment_t));
+		seg = (sim_segment_t*)calloc(1, sizeof(sim_segment_t));
 		seg->packet_id = seg->fid = i;
 		seg->payload_type = i % 2;
 		seg->ftype = 1;
@@ -177,7 +177,7 @@ void test_flex_sender(uint8_t protect_fraction)
 		list_size(fec_list));
 		
 	if (list_size(fec_list) > 0){
-		sim_fec_t* fec_packet = list_front(fec_list);
+		sim_fec_t* fec_packet = (sim_fec_t*)list_front(fec_list);
 		printf("fec col = %d, row = %d\n", fec_packet->col, fec_packet->row);
 		verify_flex_sender(segs, FLEX_SEG_NUM, fec_list);
 	}
@@ -214,7 +214,7 @@ static void packet_add_recover_list(skiplist_t *l, sim_segment_t* seg)
 static void test_free_rec_item(skiplist_item_t key, skiplist_item_t val, void* args)
 {
 	sim_segment_t* seg;
-	seg = val.ptr;
+	seg = (sim_segment_t*)val.ptr;
 	if (seg != NULL)
 		free(seg);
 }
@@ -237,7 +237,7 @@ static int test_flex_order(sim_segment_t* segs[], base_list_t* fec_list, uint8_t
 	log_buffer_pos += snprintf(log_buffer + log_buffer_pos, log_buffer_len-log_buffer_pos, "]");
 
 	flex_fec_receiver_t* receiver = flex_fec_receiver_create(NULL, NULL, NULL);
-	sim_fec_t* fec_packet = list_front(fec_list);
+	sim_fec_t* fec_packet = (sim_fec_t*)list_front(fec_list);
 	flex_fec_receiver_active(receiver, fec_packet->fec_id, fec_packet->col, fec_packet->row, fec_packet->base_id, fec_packet->count);
 	log_buffer_pos += snprintf(log_buffer + log_buffer_pos, log_buffer_len-log_buffer_pos, ", fec row = %d, colum = %d\n", fec_packet->row, fec_packet->col);
 
@@ -257,14 +257,14 @@ static int test_flex_order(sim_segment_t* segs[], base_list_t* fec_list, uint8_t
 	skiplist_t* rec_map = skiplist_create(idu32_compare, NULL, NULL); //recovered fec segments list
 	base_list_unit_t* iter;
 	LIST_FOREACH(fec_list, iter){
-		packet_add_recover_list(rec_map, flex_fec_receiver_on_fec(receiver, iter->pdata));
+		packet_add_recover_list(rec_map, flex_fec_receiver_on_fec(receiver, (sim_fec_t*)iter->pdata));
 	}
 
 	sim_segment_t* seg;
 	skiplist_iter_t* sl_iter;
 	while (skiplist_size(rec_map) > 0){
 		sl_iter = skiplist_first(rec_map);
-		seg = sl_iter->val.ptr;
+		seg = (sim_segment_t*)sl_iter->val.ptr;
 
 		log_buffer_pos += snprintf(log_buffer + log_buffer_pos, log_buffer_len-log_buffer_pos, ", recover id=%u", seg->packet_id);
 		segment_assert(seg, segs[seg->packet_id]);
@@ -290,7 +290,7 @@ static int test_flex_order(sim_segment_t* segs[], base_list_t* fec_list, uint8_t
 		skiplist_remove(rec_map, sl_iter->key);
 
 		do{
-			packet_add_recover_list(rec_map, list_pop(out));  // recover matrix
+			packet_add_recover_list(rec_map, (sim_segment_t*)list_pop(out));  // recover matrix
 		} while (list_size(out) > 0);
 	}
 	destroy_list(out);
@@ -323,7 +323,7 @@ int test_flex_receiver(uint8_t protect_fraction, uint8_t loss_num, uint8_t loss[
 
 	// generate test data
 	for (int i = 0; i < RECV_SEG_NUM; i++){
-		sim_segment_t* seg = calloc(1, sizeof(sim_segment_t));
+		sim_segment_t* seg = (sim_segment_t*)calloc(1, sizeof(sim_segment_t));
 		seg->packet_id = seg->fid = i;
 		seg->payload_type = i % 2;
 		seg->ftype = 1;

@@ -9,22 +9,10 @@
 
 extern int frame_log(int level, const char* file, int line, const char *fmt, ...);
 
-H264Encoder::H264Encoder()
+H264Encoder::H264Encoder(PixelFormat fmt)
 {
-	src_width_ = PIC_WIDTH_640;
-	src_height_ = PIC_HEIGHT_480;
-
 	sws_context_ = NULL;
-
-	frame_rate_ = DEFAULT_FRAME_RATE;
-	max_resolution_ = VIDEO_480P;
-	curr_resolution_ = VIDEO_480P;
-
-	bitrate_kbps_ = 800;
-
-	inited_ = false;
-	frame_index_ = 0;
-
+	fmt_ = fmt;
 	en_h_ = NULL;
 
 	memset(&en_picture_, 0, sizeof(en_picture_));
@@ -53,11 +41,20 @@ bool H264Encoder::open_encoder()
 	if ((en_h_ = x264_encoder_open(&en_param_)) == NULL)
 		return false;
 
-	if (x264_picture_alloc(&en_picture_, X264_CSP_I420, resolution_infos[curr_resolution_].codec_width, resolution_infos[curr_resolution_].codec_height) != 0)
-		return false;
-
+	if (AV_PIX_FMT_YUV420P != fmt_) {
+		if (x264_picture_alloc(&en_picture_, X264_CSP_I420, resolution_infos[curr_resolution_].codec_width, resolution_infos[curr_resolution_].codec_height) != 0)
+			return false;
+	} else {
+		x264_picture_init(&en_picture_);
+		en_picture_.img.i_csp = X264_CSP_I420;
+		en_picture_.img.i_plane = 3;
+		en_picture_.img.i_stride[0] = resolution_infos[curr_resolution_].codec_width;
+		en_picture_.img.i_stride[1] = resolution_infos[curr_resolution_].codec_width >> 1;
+		en_picture_.img.i_stride[2] = resolution_infos[curr_resolution_].codec_width >> 1;
+	}
+	
 	sws_context_ = sws_getContext(src_width_, src_height_,
-		PIX_FMT_BGR24, resolution_infos[curr_resolution_].codec_width, resolution_infos[curr_resolution_].codec_height,
+		fmt_, resolution_infos[curr_resolution_].codec_width, resolution_infos[curr_resolution_].codec_height,
 		PIX_FMT_YUV420P, SWS_FAST_BILINEAR, NULL, NULL, NULL);
 
 	frame_index_ = 0;
@@ -68,7 +65,9 @@ bool H264Encoder::open_encoder()
 void H264Encoder::close_encoder()
 {
 	if (en_h_ != NULL){
-		x264_picture_clean(&en_picture_);
+		if (AV_PIX_FMT_YUV420P != fmt_)
+			x264_picture_clean(&en_picture_);
+
 		x264_encoder_close(en_h_);
 		en_h_ = NULL;
 
@@ -82,7 +81,7 @@ void H264Encoder::close_encoder()
 void H264Encoder::reconfig_encoder(uint32_t bitrate_kbps)
 {
 	en_param_.rc.i_vbv_max_bitrate = SU_MAX(bitrate_kbps, resolution_infos[curr_resolution_].min_rate);
-	en_param_.rc.i_bitrate = (en_param_.rc.i_vbv_max_bitrate + resolution_infos[curr_resolution_].min_rate) / 2;
+	en_param_.rc.i_bitrate = (en_param_.rc.i_vbv_max_bitrate + resolution_infos[curr_resolution_].min_rate) >> 1;
 
 	if (en_h_ != NULL)
 		x264_encoder_reconfig(en_h_, &en_param_);
@@ -92,17 +91,7 @@ int H264Encoder::get_bitrate() const
 {
 	return en_param_.rc.i_vbv_max_bitrate;
 }
-/*
-int H264Encoder::get_codec_width() const
-{
-	return resolution_infos[curr_resolution_].codec_width;
-}
 
-int H264Encoder::get_codec_height() const
-{
-	return resolution_infos[curr_resolution_].codec_height;
-}
-*/
 void H264Encoder::config_param()
 {
 	const encoder_resolution_t& res = resolution_infos[curr_resolution_];
@@ -156,7 +145,7 @@ void H264Encoder::config_param()
 	en_param_.analyse.inter = X264_ANALYSE_I8x8 | X264_ANALYSE_I4x4;
 }
 
-bool H264Encoder::encode(uint8_t *in, int in_size, enum PixelFormat src_pix_fmt, uint8_t *out, int *out_size, int *frame_type, bool request_keyframe)
+bool H264Encoder::encode(uint8_t *in, enum PixelFormat src_pix_fmt, uint8_t *out, int *out_size, int *frame_type, bool request_keyframe)
 {
 	bool ret = false;
 	if (!inited_)
@@ -170,8 +159,13 @@ bool H264Encoder::encode(uint8_t *in, int in_size, enum PixelFormat src_pix_fmt,
 	frame_index_++;
 
 	//RGB -> YUV
-	if (src_pix_fmt == PIX_FMT_RGB24 || src_pix_fmt == PIX_FMT_BGR24){
-		int src_stride = src_width_ * 3;
+	if (src_pix_fmt == PIX_FMT_YUV420P) {
+		en_picture_.img.plane[0] = in;
+		en_picture_.img.plane[1] = en_picture_.img.plane[0] + en_param_.i_width * en_param_.i_height;
+		en_picture_.img.plane[2] = en_picture_.img.plane[1] + (en_param_.i_width * en_param_.i_height >> 2);
+		
+	} else {
+		int src_stride = src_width_ << 2;
 		rc = sws_scale(sws_context_, &in, &src_stride, 0, src_height_,
 			en_picture_.img.plane, en_picture_.img.i_stride);
 	}
@@ -185,7 +179,7 @@ bool H264Encoder::encode(uint8_t *in, int in_size, enum PixelFormat src_pix_fmt,
 	en_picture_.i_type = request_keyframe ? X264_TYPE_IDR : X264_TYPE_AUTO;
 
 	rc = x264_encoder_encode(en_h_, &nal, &i_nal, &en_picture_, &pic_out_);
-	if (rc > 0){
+	if (rc > 0) {
 		*out_size = rc;
 		memcpy(out, nal[0].p_payload, rc);
 

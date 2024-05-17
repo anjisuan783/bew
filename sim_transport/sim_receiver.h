@@ -13,6 +13,8 @@
 #include "sim_proto.h"
 #include "sim_fec.h"
 
+class VCMJitterBuffer;
+
 struct __razor_receiver;
 typedef struct __razor_receiver razor_receiver_t;
 
@@ -89,6 +91,8 @@ typedef struct __sim_receiver
 	sim_session_t*		s;
 
 	sim_receiver_fec_t* recover;
+
+	VCMJitterBuffer* jitter;
 } sim_receiver_t;
 
 sim_receiver_t* sim_receiver_create(sim_session_t* s, int transport_type);

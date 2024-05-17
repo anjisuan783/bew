@@ -12,7 +12,10 @@
 #include <string>
 #include <vector>
 
+#include "rtc_error.h"
+#include "rtc_def.h"
 #include "codec_common.h"
+#include "webrtc/common_video/include/i420_buffer_pool.h"
 
 #include "streams.h"
 #include "qedit.h"
@@ -26,8 +29,10 @@ using namespace ds;
 
 enum PIX_FORMAT
 {
+	YUV420 = 0,
 	YUV422 = 1,
-	RGB24 = 2
+	RGB24 = 2,
+	RGB32 = 30
 };
 
 
@@ -45,6 +50,8 @@ typedef struct{
 	uint32_t		codec_width;
 	uint32_t		codec_height;
 }video_info_t;
+
+class IRTCRender;
 
 class CFVideoRecorder
 {
@@ -78,7 +85,7 @@ private:
 	void			rotate_pic();
 
 	int GetBestMatchedCapability(const SCaptureDevice& dev, const SDeviceCapability& requested);
-
+	RTCResult PutVideoData(rtc::scoped_refptr<webrtc::I420Buffer>&);
 private:
 	bool				open_;
 
@@ -108,12 +115,14 @@ private:
 	bool				intra_frame_;
 
 	int frame_count_ = 0;
+	IRTCRender *render_ = nullptr;
+	webrtc::I420BufferPool m_bufferPool;
 };
 
 class CFVideoPlayer 
 {
 public:
-	CFVideoPlayer(HWND hWnd, const RECT& rect);
+	CFVideoPlayer(HWND hWnd);
 	virtual ~CFVideoPlayer();
 
 	bool open();
@@ -122,13 +131,10 @@ public:
 	int write(const void* data, uint32_t size, uint8_t payload_type);
 	std::string get_resolution();
 private:
+	RTCResult PutVideoData(void *buffer);
+
 	bool		open_;
 	HWND		hwnd_;
-
-	CDib		dib_;
-	RECT        rect_;
-	HDC			hdc_;
-
 	SimpleLock	lock_;
 
 	uint32_t    decode_data_width_;
@@ -140,6 +146,8 @@ private:
 	VideoDecoder* decoder_;
 
 	int frame_count_ = 0;
+	IRTCRender *render_ = nullptr;
+	webrtc::I420BufferPool m_bufferPool;
 };
 
 int get_camera_input_devices(std::vector<std::wstring>& vec_cameras);

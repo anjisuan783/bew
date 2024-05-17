@@ -14,7 +14,7 @@ class H264Decoder : public VideoDecoder
 {
 public:
 	H264Decoder();
-	virtual ~H264Decoder();
+	~H264Decoder() override;
 
 protected:
 	void set_codec_id() override;

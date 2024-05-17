@@ -10,6 +10,10 @@
 #include <assert.h>
 
 #include "sim_session.h"
+#include "jitter_buffer.h"
+#include "call_stats.h"
+
+#define DISABLE_JITTER
 
 enum {
 	buffer_waiting = 0,  // init state
@@ -26,7 +30,7 @@ enum {
 #define MAX_EVICT_DELAY_MS 6000
 #define MIN_EVICT_DELAY_MS 3000
 
-const uint32_t kMaxJitterDelayNoLost = 40;
+const uint32_t kMaxJitterDelayNoLost = 10;
 
 static void sim_receiver_send_fir(sim_session_t* s, sim_receiver_t* r);
 
@@ -243,12 +247,12 @@ static int real_video_cache_put(sim_session_t* s, sim_frame_cache_t* c, sim_segm
 			c->play_frame_ts = seg->timestamp;
 		}
 
-		// calcute frame interval, limited 20 <= frame_timer << 200
+		// calcute frame interval, limited 16 <= frame_timer << 200
 		int ts_diff = seg->timestamp - c->max_ts;
 		int frame_diff = seg->fid - c->max_fid;
 		if (c->max_fid >= 0 && frame_diff > 0 && ts_diff > 0){
 			c->frame_timer = ts_diff / frame_diff;
-			c->frame_timer = SU_MAX(20, SU_MIN(200, c->frame_timer));
+			c->frame_timer = SU_MAX(10, SU_MIN(200, c->frame_timer));
 		}
 		c->max_ts = seg->timestamp;
 		c->max_fid = seg->fid;
@@ -341,11 +345,9 @@ static int real_video_check_fir(sim_session_t* s, sim_frame_cache_t* c)
 	pos = INDEX(c->min_fid + 1);
 	frame = &c->frames[pos];
 
-	/*第一帧是完整的，不做F.I.R重传*/
 	if (real_video_cache_check_frame_full(s, frame) == 0)
 		return -1;
 
-	/*缓冲区长度小于3秒，继续等待*/
 	if (c->play_frame_ts + MAX_EVICT_DELAY_MS * 3 / 5 > c->max_ts)
 		return -1;
 
@@ -378,7 +380,6 @@ static int real_video_cache_get(sim_session_t* s, sim_frame_cache_t* c, uint8_t*
 
 	space = SU_MAX(c->wait_timer, c->frame_timer);
 
-	/*计算播放时间同步*/
 	// first_ts - last_ts + interval
 	play_ready_ts = real_video_ready_ms(s, c);
 
@@ -395,7 +396,6 @@ static int real_video_cache_get(sim_session_t* s, sim_frame_cache_t* c, uint8_t*
 	 if (c->min_fid == c->max_fid)
 		goto err;
 
-	/*计算能播放的帧时间*/
 	// 4xjitter len < clean time < 3s
 	if (c->play_frame_ts + SU_MAX(MIN_EVICT_DELAY_MS, SU_MIN(MAX_EVICT_DELAY_MS, 4 * c->wait_timer)) < c->max_ts){
 		evict_gop_frame(s, c);
@@ -404,10 +404,11 @@ static int real_video_cache_get(sim_session_t* s, sim_frame_cache_t* c, uint8_t*
 	//real_video_cache_evict_discard(s, c);
 	frame = &c->frames[INDEX(c->min_fid + 1)];
 	if ((c->min_fid + 1 == frame->fid || frame->frame_type == 1) && real_video_cache_check_frame_full(s, frame) == 0){
-		/*进行间歇性快进*/
+#ifndef DISABLE_JITTER	
 		if (frame->ts > c->frame_ts + SU_MAX(500, 2 * space) && play_ready_ts > space) {
 			c->frame_ts = frame->ts - space;
 		} else if (frame->ts <= c->frame_ts) {
+#endif
 			for (i = 0; i < frame->seg_number; ++i){
 				if (size + frame->segments[i]->data_size <= buffer_size && frame->segments[i]->data_size <= SIM_VIDEO_SIZE){
 					memcpy(data + size, frame->segments[i]->data, frame->segments[i]->data_size);
@@ -421,7 +422,10 @@ static int real_video_cache_get(sim_session_t* s, sim_frame_cache_t* c, uint8_t*
 			c->frame_ts = frame->ts;
 			real_video_clean_frame(s, c, frame);
 			ret = 0;
+			//sim_debug("real_video_cache_get fid=%u size=%u \n", frame->fid, size);
+#ifndef DISABLE_JITTER
 		}
+#endif
 	} else {
 		size = 0;
 		ret = -1;
@@ -524,7 +528,7 @@ static void sim_receiver_update_loss(sim_session_t* s, sim_receiver_t* r, uint32
 		iter = skiplist_search(r->loss, key);
 		if (iter == NULL) {
 			sim_loss_t* l = (sim_loss_t*)calloc(1, sizeof(sim_loss_t));
-			l->ts = now_ts - space;  /*设置下一个请求重传的时刻*/
+			l->ts = now_ts - space;
 			l->loss_ts = now_ts;
 			l->count = 0;
 			val.ptr = l;
@@ -575,7 +579,6 @@ static void video_real_update_base(sim_session_t* s, sim_receiver_t* r)
 	}
 }
 
-/*进行ack和nack确认，并计算缓冲区的等待时间*/
 #define ACK_REAL_TIME	20
 #define ACK_HB_TIME		200
 static void video_real_ack(sim_session_t* s, sim_receiver_t* r, int heartbeat, uint32_t seq)
@@ -692,7 +695,6 @@ static void sim_receiver_recover(sim_session_t* s, sim_receiver_t* r)
 	skiplist_t* recover_map;
 	sim_segment_t* seg, *in_seg;
 
-	/*将已经恢复的包进行处理*/
 	recover_map = r->recover->recover_packets;
 	while (skiplist_size(recover_map) > 0){
 		iter = skiplist_first(recover_map);
@@ -705,7 +707,7 @@ static void sim_receiver_recover(sim_session_t* s, sim_receiver_t* r)
 
 		if (sim_receiver_internal_put(s, r, in_seg) == 0){
 			//sim_debug("fec recover video segment, packet id = %u\n", in_seg->packet_id);
-			sim_fec_put_segment(s, r->recover, in_seg);  /*将恢复的包插入到FEC继续恢复其他报文*/
+			sim_fec_put_segment(s, r->recover, in_seg);
 		} else
 			free(in_seg);
 	}
@@ -728,6 +730,8 @@ sim_receiver_t* sim_receiver_create(sim_session_t* s, int transport_type)
 	r->cc = razor_receiver_create(r->cc_type, MIN_BITRATE, MAX_BITRATE, SIM_SEGMENT_HEADER_SIZE, r, send_sim_feedback);
 
 	r->recover = sim_fec_create(s);
+
+	r->jitter = new VCMJitterBuffer(s->clock);
 
 	return r;
 }
@@ -752,6 +756,11 @@ void sim_receiver_destroy(sim_session_t* s, sim_receiver_t* r)
 		r->recover = NULL;
 	}
 
+	if (r->jitter) {
+		r->jitter->Stop();
+		delete r->jitter;
+	}
+
 	free(r);
 }
 
@@ -771,6 +780,10 @@ void sim_receiver_reset(sim_session_t* s, sim_receiver_t* r, int transport_type)
 	r->fir_state = fir_normal;
 	r->fir_seq = 0;
 
+	if (r->jitter) {
+		r->jitter->Flush();
+	}
+
 	if (r->recover != NULL)
 		sim_fec_reset(s, r->recover);
 
@@ -788,6 +801,9 @@ void sim_receiver_reset(sim_session_t* s, sim_receiver_t* r, int transport_type)
 
 int sim_receiver_active(sim_session_t* s, sim_receiver_t* r, uint32_t uid)
 {
+	const int64_t kLowRttNackMs = 20;
+	const int64_t kHighRttNackMs = 100;
+
 	if (r->actived == 1)
 		return -1;
 
@@ -800,6 +816,11 @@ int sim_receiver_active(sim_session_t* s, sim_receiver_t* r, uint32_t uid)
 
 	if (r->recover != NULL)
 		sim_fec_active(s, r->recover);
+
+	if (r->jitter) {
+		r->jitter->Start();
+		r->jitter->SetNackMode(VCMJitterBuffer::kNack, kLowRttNackMs, kHighRttNackMs);
+	}
 
 	return 0;
 }
@@ -883,6 +904,10 @@ void sim_receiver_update_rtt(sim_session_t* s, sim_receiver_t* r)
 {
 	if (r->cc != NULL)
 		r->cc->update_rtt(r->cc, s->rtt + s->rtt_var);
+
+	if (r->jitter->Running()) {
+		r->jitter->UpdateRtt(s->stats->max_rtt_ms());
+	}
 }
 
 uint32_t sim_receiver_cache_delay(sim_session_t* s, sim_receiver_t* r)

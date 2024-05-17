@@ -54,16 +54,16 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WEBRTC_WIN;RTC_WIN;_CRT_SECURE_NO_WARNINGS;WIN32;_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>./baseclasses;./dx;./dshow;./codec/x265;./codec/x265/include;./codec/x264;./codec/x264/include;./codec;../win_log;../../sim_transport;../../estimator;../../common;./ffmpeg/include;../../../italkengine\rtcengine\third_party\WebRTC\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>./baseclasses;./dx;./dshow;./codec/x265;./codec/x265/include;./codec/x264;./codec/x264/include;./codec;../win_log;../../sim_transport;../../estimator;../../common;./ffmpeg/include;libyuv\include;common;.;render/h;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>-DWIN32_LEAN_AND_MEAN %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>Wldap32.lib;WS2_32.lib;winmm.lib;strmbased.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>./codec/x264/lib;./ffmpeg/lib;./codec/x265/lib;./Debug/lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>d3d9.lib;libyuv.lib;Wldap32.lib;WS2_32.lib;winmm.lib;strmbased.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>./codec/x264/lib;./ffmpeg/lib;./codec/x265/lib;./Debug/lib;3rd/win32/$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <Midl>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -83,9 +83,9 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;WIN32;_WINDOWS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WEBRTC_WIN;RTC_WIN;_CRT_SECURE_NO_WARNINGS;WIN32_LEAN_AND_MEAN;WIN32;_WINDOWS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>./dshow;./dx;./baseclasses;./codec/x265;./codec/x265/include;./codec/x264;./codec/x264/include;./codec;../win_log;../../sim_transport;../../estimator;../../common;./ffmpeg/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>./dshow;./dx;./baseclasses;./codec/x265;./codec/x265/include;./codec/x264;./codec/x264/include;./codec;../win_log;../../sim_transport;../../estimator;../../common;./ffmpeg/include;.;render/h;common;libyuv\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -93,9 +93,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>./codec/x264/lib;./ffmpeg/lib;./codec/x265/lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>./codec/x264/lib;./ffmpeg/lib;./codec/x265/lib;3rd/win32/$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
-      <AdditionalDependencies>Wldap32.lib;WS2_32.lib;winmm.lib;strmbase.lib</AdditionalDependencies>
+      <AdditionalDependencies>d3d9.lib;libyuv.lib;Wldap32.lib;WS2_32.lib;winmm.lib;strmbase.lib</AdditionalDependencies>
     </Link>
     <Midl>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -108,9 +108,6 @@
       <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <Text Include="ReadMe.txt" />
-  </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\win_log\audio_log.h" />
     <ClInclude Include="..\win_log\gettimeofday.h" />
@@ -126,6 +123,9 @@
     <ClInclude Include="echoDlg.h" />
     <ClInclude Include="play_thread.h" />
     <ClInclude Include="record_thread.h" />
+    <ClInclude Include="render\h\rtc_render.h" />
+    <ClInclude Include="render\video_render_impl.h" />
+    <ClInclude Include="render\win_video_render.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="simple_lock.h" />
     <ClInclude Include="sim_object.h" />
@@ -135,6 +135,137 @@
     <ClInclude Include="utf8to.h" />
     <ClInclude Include="video_device.h" />
     <ClInclude Include="video_view.h" />
+    <ClInclude Include="webrtc\api\video\i420_buffer.h" />
+    <ClInclude Include="webrtc\api\video\video_frame.h" />
+    <ClInclude Include="webrtc\api\video\video_frame_buffer.h" />
+    <ClInclude Include="webrtc\api\video\video_rotation.h" />
+    <ClInclude Include="webrtc\base\arraysize.h" />
+    <ClInclude Include="webrtc\base\array_view.h" />
+    <ClInclude Include="webrtc\base\asyncresolverinterface.h" />
+    <ClInclude Include="webrtc\base\asyncudpsocket.h" />
+    <ClInclude Include="webrtc\base\atomicops.h" />
+    <ClInclude Include="webrtc\base\base64.h" />
+    <ClInclude Include="webrtc\base\basictypes.h" />
+    <ClInclude Include="webrtc\base\bind.h" />
+    <ClInclude Include="webrtc\base\bitbuffer.h" />
+    <ClInclude Include="webrtc\base\buffer.h" />
+    <ClInclude Include="webrtc\base\bufferqueue.h" />
+    <ClInclude Include="webrtc\base\bytebuffer.h" />
+    <ClInclude Include="webrtc\base\byteorder.h" />
+    <ClInclude Include="webrtc\base\callback.h" />
+    <ClInclude Include="webrtc\base\checks.h" />
+    <ClInclude Include="webrtc\base\constructormagic.h" />
+    <ClInclude Include="webrtc\base\copyonwritebuffer.h" />
+    <ClInclude Include="webrtc\base\cpu_time.h" />
+    <ClInclude Include="webrtc\base\crc32.h" />
+    <ClInclude Include="webrtc\base\criticalsection.h" />
+    <ClInclude Include="webrtc\base\cryptstring.h" />
+    <ClInclude Include="webrtc\base\deprecation.h" />
+    <ClInclude Include="webrtc\base\dscp.h" />
+    <ClInclude Include="webrtc\base\event.h" />
+    <ClInclude Include="webrtc\base\event_tracer.h" />
+    <ClInclude Include="webrtc\base\fakenetwork.h" />
+    <ClInclude Include="webrtc\base\fakesslidentity.h" />
+    <ClInclude Include="webrtc\base\file.h" />
+    <ClInclude Include="webrtc\base\flags.h" />
+    <ClInclude Include="webrtc\base\format_macros.h" />
+    <ClInclude Include="webrtc\base\function_view.h" />
+    <ClInclude Include="webrtc\base\gtest_prod_util.h" />
+    <ClInclude Include="webrtc\base\gunit.h" />
+    <ClInclude Include="webrtc\base\gunit_prod.h" />
+    <ClInclude Include="webrtc\base\ignore_wundef.h" />
+    <ClInclude Include="webrtc\base\keep_ref_until_done.h" />
+    <ClInclude Include="webrtc\base\location.h" />
+    <ClInclude Include="webrtc\base\logging.h" />
+    <ClInclude Include="webrtc\base\mathutils.h" />
+    <ClInclude Include="webrtc\base\md5.h" />
+    <ClInclude Include="webrtc\base\md5digest.h" />
+    <ClInclude Include="webrtc\base\memory_usage.h" />
+    <ClInclude Include="webrtc\base\mod_ops.h" />
+    <ClInclude Include="webrtc\base\nattypes.h" />
+    <ClInclude Include="webrtc\base\networkroute.h" />
+    <ClInclude Include="webrtc\base\onetimeevent.h" />
+    <ClInclude Include="webrtc\base\optional.h" />
+    <ClInclude Include="webrtc\base\pathutils.h" />
+    <ClInclude Include="webrtc\base\platform_file.h" />
+    <ClInclude Include="webrtc\base\platform_thread.h" />
+    <ClInclude Include="webrtc\base\platform_thread_types.h" />
+    <ClInclude Include="webrtc\base\race_checker.h" />
+    <ClInclude Include="webrtc\base\random.h" />
+    <ClInclude Include="webrtc\base\ratelimiter.h" />
+    <ClInclude Include="webrtc\base\ratetracker.h" />
+    <ClInclude Include="webrtc\base\rate_limiter.h" />
+    <ClInclude Include="webrtc\base\rate_statistics.h" />
+    <ClInclude Include="webrtc\base\refcount.h" />
+    <ClInclude Include="webrtc\base\refcountedobject.h" />
+    <ClInclude Include="webrtc\base\rollingaccumulator.h" />
+    <ClInclude Include="webrtc\base\safe_compare.h" />
+    <ClInclude Include="webrtc\base\safe_conversions.h" />
+    <ClInclude Include="webrtc\base\safe_conversions_impl.h" />
+    <ClInclude Include="webrtc\base\sanitizer.h" />
+    <ClInclude Include="webrtc\base\scopedptrcollection.h" />
+    <ClInclude Include="webrtc\base\scoped_autorelease_pool.h" />
+    <ClInclude Include="webrtc\base\scoped_ref_ptr.h" />
+    <ClInclude Include="webrtc\base\sequenced_task_checker.h" />
+    <ClInclude Include="webrtc\base\sequenced_task_checker_impl.h" />
+    <ClInclude Include="webrtc\base\sha1.h" />
+    <ClInclude Include="webrtc\base\sha1digest.h" />
+    <ClInclude Include="webrtc\base\sharedexclusivelock.h" />
+    <ClInclude Include="webrtc\base\sigslot.h" />
+    <ClInclude Include="webrtc\base\sigslotrepeater.h" />
+    <ClInclude Include="webrtc\base\sigslottester.h" />
+    <ClInclude Include="webrtc\base\stringencode.h" />
+    <ClInclude Include="webrtc\base\swap_queue.h" />
+    <ClInclude Include="webrtc\base\task.h" />
+    <ClInclude Include="webrtc\base\taskparent.h" />
+    <ClInclude Include="webrtc\base\taskrunner.h" />
+    <ClInclude Include="webrtc\base\task_queue.h" />
+    <ClInclude Include="webrtc\base\template_util.h" />
+    <ClInclude Include="webrtc\base\testbase64.h" />
+    <ClInclude Include="webrtc\base\testechoserver.h" />
+    <ClInclude Include="webrtc\base\testutils.h" />
+    <ClInclude Include="webrtc\base\thread_annotations.h" />
+    <ClInclude Include="webrtc\base\thread_checker.h" />
+    <ClInclude Include="webrtc\base\thread_checker_impl.h" />
+    <ClInclude Include="webrtc\base\timedelta.h" />
+    <ClInclude Include="webrtc\base\timestampaligner.h" />
+    <ClInclude Include="webrtc\base\timeutils.h" />
+    <ClInclude Include="webrtc\base\trace_event.h" />
+    <ClInclude Include="webrtc\base\type_traits.h" />
+    <ClInclude Include="webrtc\base\weak_ptr.h" />
+    <ClInclude Include="webrtc\base\win32.h" />
+    <ClInclude Include="webrtc\base\win32window.h" />
+    <ClInclude Include="webrtc\base\window.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\aligned_array.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\aligned_malloc.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\asm_defines.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\atomic32.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\clock.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\compile_assert_c.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\cpu_features_wrapper.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\cpu_info.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\critical_section_wrapper.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\event_wrapper.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\field_trial.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\field_trial_default.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\file_wrapper.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\fix_interlocked_exchange_pointer_win.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\logging.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\metrics.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\ntp_time.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\rtp_to_ntp_estimator.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\rw_lock_wrapper.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\sleep.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\stringize_macros.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\timestamp_extrapolator.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\trace.h" />
+    <ClInclude Include="webrtc\system_wrappers\include\utf_util_win.h" />
+    <ClInclude Include="webrtc\system_wrappers\source\condition_variable_event_win.h" />
+    <ClInclude Include="webrtc\system_wrappers\source\event_timer_win.h" />
+    <ClInclude Include="webrtc\system_wrappers\source\rw_lock_win.h" />
+    <ClInclude Include="webrtc\system_wrappers\source\rw_lock_winxp_win.h" />
+    <ClInclude Include="webrtc\system_wrappers\source\trace_impl.h" />
+    <ClInclude Include="webrtc\system_wrappers\source\trace_win.h" />
     <ClInclude Include="win32_thread.h" />
   </ItemGroup>
   <ItemGroup>
@@ -186,6 +317,8 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="render\video_render_impl.cpp" />
+    <ClCompile Include="render\win_video_render.cpp" />
     <ClCompile Include="sim_object.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
@@ -202,6 +335,76 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="webrtc\api\video\i420_buffer.cc" />
+    <ClCompile Include="webrtc\api\video\video_frame.cc" />
+    <ClCompile Include="webrtc\base\asyncresolverinterface.cc" />
+    <ClCompile Include="webrtc\base\base64.cc" />
+    <ClCompile Include="webrtc\base\bitbuffer.cc" />
+    <ClCompile Include="webrtc\base\bufferqueue.cc" />
+    <ClCompile Include="webrtc\base\bytebuffer.cc" />
+    <ClCompile Include="webrtc\base\checks.cc" />
+    <ClCompile Include="webrtc\base\copyonwritebuffer.cc" />
+    <ClCompile Include="webrtc\base\cpu_time.cc" />
+    <ClCompile Include="webrtc\base\crc32.cc" />
+    <ClCompile Include="webrtc\base\criticalsection.cc" />
+    <ClCompile Include="webrtc\base\cryptstring.cc" />
+    <ClCompile Include="webrtc\base\rtc_event.cc" />
+    <ClCompile Include="webrtc\base\event_tracer.cc" />
+    <ClCompile Include="webrtc\base\file.cc" />
+    <ClCompile Include="webrtc\base\file_win.cc" />
+    <ClCompile Include="webrtc\base\flags.cc" />
+    <ClCompile Include="webrtc\base\location.cc" />
+    <ClCompile Include="webrtc\base\rtc_logging.cc" />
+    <ClCompile Include="webrtc\base\md5.cc" />
+    <ClCompile Include="webrtc\base\md5digest.cc" />
+    <ClCompile Include="webrtc\base\memory_usage.cc" />
+    <ClCompile Include="webrtc\base\nattypes.cc" />
+    <ClCompile Include="webrtc\base\optional.cc" />
+    <ClCompile Include="webrtc\base\pathutils.cc" />
+    <ClCompile Include="webrtc\base\platform_file.cc" />
+    <ClCompile Include="webrtc\base\platform_thread.cc" />
+    <ClCompile Include="webrtc\base\race_checker.cc" />
+    <ClCompile Include="webrtc\base\random.cc" />
+    <ClCompile Include="webrtc\base\ratelimiter.cc" />
+    <ClCompile Include="webrtc\base\ratetracker.cc" />
+    <ClCompile Include="webrtc\base\rate_limiter.cc" />
+    <ClCompile Include="webrtc\base\rate_statistics.cc" />
+    <ClCompile Include="webrtc\base\sequenced_task_checker_impl.cc" />
+    <ClCompile Include="webrtc\base\sha1.cc" />
+    <ClCompile Include="webrtc\base\sha1digest.cc" />
+    <ClCompile Include="webrtc\base\sharedexclusivelock.cc" />
+    <ClCompile Include="webrtc\base\sigslot.cc" />
+    <ClCompile Include="webrtc\base\stringencode.cc" />
+    <ClCompile Include="webrtc\base\task.cc" />
+    <ClCompile Include="webrtc\base\taskparent.cc" />
+    <ClCompile Include="webrtc\base\taskrunner.cc" />
+    <ClCompile Include="webrtc\base\task_queue_win.cc" />
+    <ClCompile Include="webrtc\base\thread_checker_impl.cc" />
+    <ClCompile Include="webrtc\base\timestampaligner.cc" />
+    <ClCompile Include="webrtc\base\timeutils.cc" />
+    <ClCompile Include="webrtc\base\weak_ptr.cc" />
+    <ClCompile Include="webrtc\base\win32securityerrors.cc" />
+    <ClCompile Include="webrtc\base\win32window.cc" />
+    <ClCompile Include="webrtc\common_video\i420_buffer_pool.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\aligned_malloc.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\atomic32_win.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\clock.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\condition_variable_event_win.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\cpu_features.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\cpu_info.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\webrtc_event.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\event_timer_win.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\field_trial_default.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\file_impl.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\webrtc_logging.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\rtp_to_ntp_estimator.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\rw_lock.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\rw_lock_win.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\rw_lock_winxp_win.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\sleep.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\timestamp_extrapolator.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\trace_impl.cc" />
+    <ClCompile Include="webrtc\system_wrappers\source\trace_win.cc" />
     <ClCompile Include="win32_thread.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
@@ -212,6 +415,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="res\echo.rc2" />
+    <None Include="webrtc\base\callback.h.pump" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\echo.ico" />

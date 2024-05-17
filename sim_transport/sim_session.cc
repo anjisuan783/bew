@@ -6,12 +6,16 @@
 */
 
 #include "sim_session.h"
-#include "sim_receiver.h"
-#include "sim_sender.h"
-#include "exp_filter.h"
 
 #include <assert.h>
 #include <time.h>
+
+#include "sim_receiver.h"
+#include "sim_sender.h"
+#include "exp_filter.h"
+#include "call_stats.h"
+#include "clock.h"
+
 
 //state
 enum{
@@ -50,6 +54,8 @@ sim_session_t* sim_session_create(uint16_t port, void* event, sim_notify_fn noti
 	s->uid = 0;
 	s->rtt = 50;
 	s->rtt_var = 5;
+	s->stats = new CallStats;
+
 	s->loss_fraction = 0;
 
 	s->state = session_idle;
@@ -81,6 +87,8 @@ sim_session_t* sim_session_create(uint16_t port, void* event, sim_notify_fn noti
 
 	s->exp_filter = new ExpFilter(kValueLossFraction, kValueLossFractionMax);
 
+	s->clock = Clock::GetRealTimeClock();
+
 	s->run = 1;
 	s->thr = su_create_thread(NULL, sim_session_loop_event, s);
 err:
@@ -108,8 +116,15 @@ void sim_session_destroy(sim_session_t* s)
 	bin_stream_destroy(&s->sstrm);
 	su_socket_destroy(s->s);
 
-	delete s->exp_filter;
+	if (s->exp_filter)
+		delete s->exp_filter;
 
+	if (s->stats)
+		delete s->stats;
+
+	if (s->clock)
+		delete s->clock;
+	
 	free(s);
 }
 
@@ -119,6 +134,7 @@ static void sim_session_reset(sim_session_t* s)
 	s->state = session_idle;
 	s->rtt = 50;
 	s->rtt_var = 5;
+	s->stats->reset();
 	s->loss_fraction = 0;
 	s->scid = rand();
 	s->rcid = 0;
@@ -314,23 +330,25 @@ int sim_session_network_send(sim_session_t* s, bin_stream_t* strm)
 }
 
 // keep_rtt is real rtt
-void sim_session_calculate_rtt(sim_session_t* s, uint32_t keep_rtt)
+void sim_session_calculate_rtt(sim_session_t* s, uint32_t keep_rtt, int64_t now)
 {
-	if (keep_rtt < 5)
-		keep_rtt = 5;
+	//if (keep_rtt < 5)
+	//	keep_rtt = 5;
 
 	// s->rtt_var = 3/4 * s->rtt_var + 1/4 * |s->rtt - keep_rtt|;
 	s->rtt_var = (s->rtt_var * 3 + SU_ABS(s->rtt, keep_rtt)) >> 2;
-	if (s->rtt_var < 10)
-		s->rtt_var = 10;
+	//if (s->rtt_var < 10)
+	//	s->rtt_var = 10;
 
 	// s->rtt = 7/8 * s->rtt + 1/8*keep_rtt;
 	s->rtt = (7 * s->rtt + keep_rtt) >> 3;
-	if (s->rtt < 10)
-		s->rtt = 10;
+	//if (s->rtt < 10)
+	//	s->rtt = 10;
+
+	s->stats->OnRttUpdate(keep_rtt, now);
 
 	//sim_debug("sim_session_calculate_rtt rtt=%u rttvar=%u realrtt=%u\n", s->rtt, s->rtt_var, keep_rtt);
-	if (s->sender != NULL){
+	if (s->sender != NULL) {
 		sim_sender_update_rtt(s, s->sender);
 		s->sender->cc->update_rtt(s->sender->cc, keep_rtt);
 	}
@@ -511,8 +529,10 @@ static void process_sim_pong(sim_session_t* s, sim_header_t* header, bin_stream_
 	sim_pong_t pong;
 	sim_decode_msg(strm, header, &pong);
 
-	int64_t diff_ts = GET_SYS_MS() - pong.ts;
-	sim_session_calculate_rtt(s, SU_MAX(diff_ts, 5));
+	int64_t now = GET_SYS_MS();
+	int64_t diff_ts = now - pong.ts;
+	//sim_session_calculate_rtt(s, SU_MAX(diff_ts, 5));
+	sim_session_calculate_rtt(s, diff_ts, now);
 }
 
 static void process_sim_seg(sim_session_t* s, sim_header_t* header, bin_stream_t* strm, su_addr* addr)
@@ -716,12 +736,15 @@ static void sim_session_state_timer(sim_session_t* s, int64_t now_ts, sim_sessio
 		}
 
 		if (s->state_cb != NULL){
-			sprintf(info, "video rate=%ukb/s, send=%ukb/s, recv=%ukb/s, fec=%ukb/s, rtt=%d+%dms, max frame size=%uKB, pacer delay=%ums, cache delay=%ums interval=%ums, jitter=%ums, lost=%.2f",
+			snprintf(info, SIM_INFO_SIZE,
+				"video rate=%ukb/s, send=%ukb/s, recv=%ukb/s, fec=%ukb/s, rtt=%d+%d, max frame size=%uKB, pacer delay=%u, cache delay=%u interval=%u, jitter=%u, lost=%.2f, rtt_avg=%lld, rtt_max=%lld",
 					(uint32_t)(s->video_bytes * 1000 * 8 / delay), 
 					(uint32_t)(s->sbandwidth * 1000 * 8 / delay), 
 					(uint32_t)(s->rbandwidth * 1000 * 8 / delay), 
 					(uint32_t)(s->fec_bytes * 1000 * 8 / delay), 
-					s->rtt, s->rtt_var, (s->max_frame_size >> 10), pacer_ms, cache_delay, interval_ts, jitter_ts, s->exp_filter->filtered()*100);
+					s->rtt, s->rtt_var, (s->max_frame_size >> 10), 
+					pacer_ms, cache_delay, interval_ts, jitter_ts, s->exp_filter->filtered()*100,
+					s->stats->avg_rtt_ms(), s->stats->max_rtt_ms());
 			s->state_cb(s->event, info);
 		}
 

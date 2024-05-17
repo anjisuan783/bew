@@ -361,6 +361,8 @@ int sim_sender_put(sim_session_t* s, sim_sender_t* sender, uint8_t payload_type,
 	if (sender->flex != NULL)
 		sim_sender_fec(s, sender);
 
+	//sim_debug("sim_sender_put fid=%u size=%u\n", sender->frame_id_seed, size);
+
 	return 0;
 }
 
@@ -411,7 +413,7 @@ int sim_sender_ack(sim_session_t* s, sim_sender_t* sender, sim_segment_ack_t* ac
 			if (seg_send_ts <= now_ts) { 
 				uint32_t diff = (uint32_t)(now_ts - seg_send_ts);
 				//sim_debug("sim_sender_ack id=%u timestamp=%u, send_ts=%u, diff=%u\n", seg->packet_id, seg->timestamp, seg->send_ts, diff);
-				sim_session_calculate_rtt(s, (uint32_t)(diff));
+				sim_session_calculate_rtt(s, (uint32_t)(diff), now_ts);
 			}
 		}
 	}

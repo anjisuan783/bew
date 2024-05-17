@@ -22,31 +22,13 @@ extern "C"
 #include "libavutil/avutil.h"
 #include "libswscale/swscale.h"
 #include "libavutil/pixfmt.h"
+#include "libavformat/avformat.h"
+#include "libswresample/swresample.h"
+#include "libavutil/imgutils.h"
+#include "libavutil/frame.h"
 };
 
 #include "rate_stat.h"
-
-/*�����ֱ���ֵ*/
-#define PIC_WIDTH_160	160
-#define PIC_HEIGHT_120	120
-
-#define PIC_WIDTH_320	320
-#define PIC_HEIGHT_240	240
-
-#define PIC_WIDTH_480	480
-#define PIC_HEIGHT_360	360
-
-#define PIC_WIDTH_640	640
-#define PIC_HEIGHT_480	480
-
-#define PIC_WIDTH_960	800
-#define PIC_HEIGHT_640	600
-
-#define PIC_WIDTH_1280	1280
-#define PIC_HEIGHT_720	720
-
-#define PIC_WIDTH_1920	1920
-#define PIC_HEIGHT_1080 1080
 
 enum Resolution
 {
@@ -94,6 +76,12 @@ enum
 	codec_vp9
 };
 
+enum VSampleFormat {
+	VSampleFormat_BGRA = 0,
+	VSampleFormat_RGB = 1,
+	VSampleFormat_I420 = 2,
+};
+
 void setup_codec(int codec_id);
 
 class VideoEncoder
@@ -112,8 +100,7 @@ public:
 
 	int get_payload_type() const;
 
-	virtual bool encode(uint8_t *in, 
-										  int in_size, 
+	virtual bool encode(uint8_t *in,
 											enum PixelFormat pix_fmt, 
 											uint8_t *out, 
 											int *out_size, 
@@ -154,7 +141,7 @@ public:
 	VideoDecoder();
 	virtual ~VideoDecoder();
 
-	bool init();
+	bool init(VSampleFormat dst_fmt);
 	void destroy();
 
 	bool decode(uint8_t *in, int in_size, uint8_t **out, int &out_width, int& out_height, int32_t &pict_type);
@@ -184,6 +171,8 @@ protected:
 	SwsContext*			sws_context_;
 
 	enum AVCodecID		codec_id_;
+
+	VSampleFormat fmt_ = VSampleFormat_I420;
 };
 
 #endif

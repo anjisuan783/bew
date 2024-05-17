@@ -44,7 +44,3 @@ void VideoViewThread::run()
 	free(data);
 	m_run_flag = true;
 }
-
-
-
-
