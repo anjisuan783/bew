@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "clock.h"
+#include "session_log.h"
 
 // Use this rtt if no value has been reported.
 static const int64_t kDefaultRtt = 200;
@@ -544,7 +545,7 @@ class VCMJitterEstimator {
 
  protected:
   // These are protected for better testing possibilities
-  double _theta[2];  // Estimated line parameters (slope, offset)
+  double _theta[2];  // Estimated line parameters (slope, offset), frameDelay=1/C + networkjitter
   double _varNoise;  // Variance of the time-deviation from the line
 
   virtual bool LowRateExperimentEnabled();
@@ -737,6 +738,7 @@ void VCMJitterEstimator::UpdateEstimate(int64_t frameDelayMS,
     return;
   }
   int deltaFS = frameSizeBytes - _prevFrameSize;
+  // calculate first 5 frames for getting the _avgFrameSize quickly
   if (_fsCount < kFsAccuStartupSamples) {
     _fsSum += frameSizeBytes;
     _fsCount++;
@@ -747,21 +749,19 @@ void VCMJitterEstimator::UpdateEstimate(int64_t frameDelayMS,
   }
   if (!incompleteFrame || frameSizeBytes > _avgFrameSize) {
     double avgFrameSize = _phi * _avgFrameSize + (1 - _phi) * frameSizeBytes;
+    // 68-95-99.7
     if (frameSizeBytes < _avgFrameSize + 2 * sqrt(_varFrameSize)) {
       // Only update the average frame size if this sample wasn't a
       // key frame
       _avgFrameSize = avgFrameSize;
     }
     // Update the variance anyway since we want to capture cases where we only
-    // get
-    // key frames.
-    _varFrameSize = std::max<double>(_phi * _varFrameSize +
-                                (1 - _phi) * (frameSizeBytes - avgFrameSize) *
-                                    (frameSizeBytes - avgFrameSize),
-                            1.0);
+    // get key frames.
+    _varFrameSize = std::max<double>(
+        _phi * _varFrameSize + (1 - _phi) * (frameSizeBytes - avgFrameSize) * (frameSizeBytes - avgFrameSize), 1.0);
   }
 
-  // Update max frameSize estimate
+  // Update max frameSize estimate, fast up, slow down
   _maxFrameSize =
       std::max<double>(_psi * _maxFrameSize, static_cast<double>(frameSizeBytes));
 
@@ -778,8 +778,7 @@ void VCMJitterEstimator::UpdateEstimate(int64_t frameDelayMS,
   double deviation = DeviationFromExpectedDelay(frameDelayMS, deltaFS);
 
   if (fabs(deviation) < _numStdDevDelayOutlier * sqrt(_varNoise) ||
-      frameSizeBytes >
-          _avgFrameSize + _numStdDevFrameSizeOutlier * sqrt(_varFrameSize)) {
+      frameSizeBytes > _avgFrameSize + _numStdDevFrameSizeOutlier * sqrt(_varFrameSize)) {
     // Update the variance of the deviation from the
     // line given by the Kalman filter
     EstimateRandomJitter(deviation, incompleteFrame);
@@ -794,9 +793,8 @@ void VCMJitterEstimator::UpdateEstimate(int64_t frameDelayMS,
       // Update the Kalman filter with the new data
       KalmanEstimateChannel(frameDelayMS, deltaFS);
     }
-  } else {
-    int nStdDev =
-        (deviation >= 0) ? _numStdDevDelayOutlier : -_numStdDevDelayOutlier;
+  } else { //outlier
+    int nStdDev = (deviation >= 0) ? _numStdDevDelayOutlier : -_numStdDevDelayOutlier;
     EstimateRandomJitter(nStdDev * sqrt(_varNoise), incompleteFrame);
   }
   // Post process the total estimated jitter
@@ -944,8 +942,7 @@ void VCMJitterEstimator::EstimateRandomJitter(double d_dT,
   }
 
   double avgNoise = alpha * _avgNoise + (1 - alpha) * d_dT;
-  double varNoise =
-      alpha * _varNoise + (1 - alpha) * (d_dT - _avgNoise) * (d_dT - _avgNoise);
+  double varNoise = alpha * _varNoise + (1 - alpha) * (d_dT - _avgNoise) * (d_dT - _avgNoise);
   if (!incompleteFrame || varNoise > _varNoise) {
     _avgNoise = avgNoise;
     _varNoise = varNoise;
@@ -956,7 +953,7 @@ void VCMJitterEstimator::EstimateRandomJitter(double d_dT,
     _varNoise = 1.0;
   }
 }
-
+// 2.33 is normal distribution 99%
 double VCMJitterEstimator::NoiseThreshold() const {
   double noiseThreshold = _noiseStdDevs * sqrt(_varNoise) - _noiseStdDevOffset;
   if (noiseThreshold < 1.0) {
@@ -1014,7 +1011,7 @@ int VCMJitterEstimator::GetJitterEstimate(double rttMultiplier) {
     // Ignore jitter for very low fps streams.
     if (fps < kJitterScaleLowThreshold) {
       if (fps == 0.0) {
-        return jitterMS;
+        return static_cast<int>(jitterMS);
       }
       return 0;
     }
@@ -1082,6 +1079,8 @@ bool VCMJitterBuffer::Running() const {
 }
 
 void VCMJitterBuffer::Flush() {
+  jitter_estimate_->Reset();
+  inter_frame_delay_->Reset(clock_->TimeInMilliseconds());
   //missing_sequence_numbers_.clear();
 }
 
@@ -1142,6 +1141,7 @@ void VCMJitterBuffer::UpdateJitterEstimate(int64_t latest_packet_time_ms,
       timestamp, &frame_delay, latest_packet_time_ms);
   // Filter out frames which have been reordered in time by the network
   if (not_reordered) {
+    sim_debug("UpdateJitterEstimate, frame_delay=%llu size=%u\n", frame_delay, frame_size);
     // Update the jitter estimate with the new samples
     jitter_estimate_->UpdateEstimate(frame_delay, frame_size, incomplete_frame);
   }

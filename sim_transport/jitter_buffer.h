@@ -55,5 +55,5 @@ class VCMJitterBuffer {
   int64_t high_rtt_nack_threshold_ms_;
 
   // NACK and retransmissions.
-  VCMNackMode nack_mode_;
+  VCMNackMode nack_mode_ = kNoNack;
 };

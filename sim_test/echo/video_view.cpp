@@ -6,21 +6,17 @@
 */
 
 #include "video_view.h"
+#include <assert.h>
 
-VideoViewThread::VideoViewThread()
-{
+VideoViewThread::VideoViewThread() { }
 
-}
-
-VideoViewThread::~VideoViewThread()
-{
-
-}
+VideoViewThread::~VideoViewThread() { }
 
 void VideoViewThread::set_video_devices(CFVideoRecorder* rec, CFVideoPlayer* player)
 {
 	rec_ = rec;
-	player_ = player;
+	player_ = nullptr;
+	//player_ = player;
 }
 
 void VideoViewThread::run()
@@ -29,6 +25,13 @@ void VideoViewThread::run()
 	int rc = MAX_PIC_SIZE, size;
 	int key;
 	uint8_t payload_type;
+
+	//DWORD_PTR cpuAffinityMask = 0x00000002;
+	//DWORD_PTR previousAffinityMask = SetThreadAffinityMask(m_thread_handle, cpuAffinityMask);
+	//assert(previousAffinityMask != 0);
+
+	BOOL success = SetThreadPriority(m_thread_handle, THREAD_PRIORITY_HIGHEST);
+	assert(success);
 
 	data = (uint8_t*)malloc(rc * sizeof(uint8_t));
 

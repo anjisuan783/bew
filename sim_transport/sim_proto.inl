@@ -175,6 +175,8 @@ static inline int sim_segment_decode(bin_stream_t* strm, sim_segment_t* body)
 	if (body->data_size == READ_DATA_ERROR)
 		body->data_size = 0;
 
+	body->recv_ts = GET_SYS_MS();
+
 	return 0;
 }
 
@@ -302,6 +304,8 @@ static inline int sim_fec_decode(bin_stream_t* strm, sim_fec_t* body)
 		body->fec_data_size = 0;
 		return -1;
 	}
+
+	body->recv_ts = GET_SYS_MS();
 
 	return 0;
 }

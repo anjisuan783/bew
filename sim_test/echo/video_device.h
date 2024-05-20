@@ -16,6 +16,7 @@
 #include "rtc_def.h"
 #include "codec_common.h"
 #include "webrtc/common_video/include/i420_buffer_pool.h"
+#include "webrtc\api\video\video_frame.h"
 
 #include "streams.h"
 #include "qedit.h"
@@ -65,7 +66,7 @@ public:
 	video_info_t&	get_video_info() { return info_; };
 	void			set_video_info(video_info_t& info){ info_ = info; };
 
-	void			set_view_hwnd(HWND hwnd, const RECT& rect);
+	void			set_view_hwnd(HWND hwnd);
 
 	int				read(void* data, uint32_t size, int& key_frame, uint8_t& payload_type);
 
@@ -85,7 +86,7 @@ private:
 	void			rotate_pic();
 
 	int GetBestMatchedCapability(const SCaptureDevice& dev, const SDeviceCapability& requested);
-	RTCResult PutVideoData(rtc::scoped_refptr<webrtc::I420Buffer>&);
+	RTCResult PutVideoData(const webrtc::VideoFrame& frame);
 private:
 	bool				open_;
 
@@ -93,18 +94,14 @@ private:
 	video_info_t		info_;
 
 	CameraPlay_Graph	cam_graph_;
-	GUID				media_type_;
 
 	CDib				dib_;
 
 	int64_t			    frame_intval_; //unit ms
 	LARGE_INTEGER		prev_timer_;
-	LARGE_INTEGER       counter_frequency_;
+	LARGE_INTEGER   counter_frequency_;
 
 	HWND				hwnd_;
-	HDC					hwnd_hdc_;
-	RECT        hwnd_rect_;
-
 	uint8_t*			video_data_;
 	uint32_t			video_data_size_;
 

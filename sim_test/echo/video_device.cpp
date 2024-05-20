@@ -18,7 +18,7 @@
 
 #include "libyuv.h"
 #include "webrtc\api\video\i420_buffer.h"
-#include "webrtc\api\video\video_frame.h"
+#include "webrtc\api\video\argb_buffer.h"
 
 #include "echo_h264_encoder.h"
 #include "echo_h264_decoder.h"
@@ -30,11 +30,12 @@
 #include "rtc_render.h"
 #include "render\video_render_impl.h"
 
+extern int frame_log(int level, const char* file, int line, const char *fmt, ...);
+
 CFVideoRecorder::CFVideoRecorder(const std::wstring& dev_name) : frame_intval_(100),
 	video_data_(NULL),
 	video_data_size_(0),
 	hwnd_(NULL),
-	hwnd_hdc_(NULL),
 	dev_(dev_name)
 {
 	info_.width = 320;
@@ -60,20 +61,10 @@ CFVideoRecorder::~CFVideoRecorder()
 	}
 }
 
-void CFVideoRecorder::set_view_hwnd(HWND hwnd, const RECT& rect)
+void CFVideoRecorder::set_view_hwnd(HWND hwnd)
 {
 	AutoSpLock auto_lock(lock_);
-	if (open_) {
-		if (hwnd_hdc_ != NULL && hwnd_ != NULL)
-			::ReleaseDC(hwnd_, hwnd_hdc_);
-
-		hwnd_ = hwnd;
-		hwnd_rect_ = rect;
-		hwnd_hdc_ = ::GetDC(hwnd_);
-	} else {
-		hwnd_ = hwnd;
-		hwnd_rect_ = rect;
-	}
+	hwnd_ = hwnd;
 }
 
 bool CFVideoRecorder::open()
@@ -121,7 +112,7 @@ bool CFVideoRecorder::open()
 		return false;
 
 	info_.rate = cap_devs[i].capabilities[idx].maxFPS;
-	info_.pix_format = YUV420;
+	info_.pix_format = RGB32;
 	frame_intval_ = 1000 / info_.rate;
 
 	if (FAILED(hr = cam_graph_.RunGraph()))
@@ -129,9 +120,6 @@ bool CFVideoRecorder::open()
 	
 	open_ = true;
 
-	// Get the local window render hdc
-	if (hwnd_ != NULL)
-		hwnd_hdc_ = ::GetDC(hwnd_);
 	// Init counter frequency
 	QueryPerformanceFrequency(&counter_frequency_);
 	// Init prev_timer_
@@ -165,11 +153,6 @@ void CFVideoRecorder::close()
 			delete[]video_data_;
 			video_data_ = NULL;
 			video_data_size_ = 0;
-		}
-
-		if (hwnd_hdc_ != NULL){
-			::ReleaseDC(hwnd_, hwnd_hdc_);
-			hwnd_hdc_ = NULL;
 		}
 
 		dib_.destroy();
@@ -211,7 +194,7 @@ bool CFVideoRecorder::capture_sample()
 	if (grabber == NULL)
 		return ret;
 
-	while (1){
+	while (1) {
 		if (!open_)
 			return ret;
 
@@ -274,31 +257,35 @@ int CFVideoRecorder::read(void* data, uint32_t data_size, int& key_frame, uint8_
 
 	data_size = 0;
 	if (capture_sample()) {
-		//if (hwnd_hdc_ != NULL){
-			
-		//	RECT new_rect = AdaptDispplay(hwnd_rect_, (float)info_.width / info_.height);
-		//	dib_.stretch_blt(hwnd_hdc_, new_rect.left, new_rect.top, new_rect.right - new_rect.left,
-		//			new_rect.bottom - new_rect.top, 0, 0, info_.width, info_.height);
-		//}
-
 		if(nullptr == render_) {
-			render_ = createVideoInternalRender(hwnd_);
+			render_ = createVideoInternalRender(hwnd_, 0);
 		}
 
 		const uint32_t& width = info_.width;
 		const uint32_t& height = info_.height;
 
-		rtc::scoped_refptr<webrtc::I420Buffer> i420Buf(webrtc::I420Buffer::Create(width, height));
-		libyuv::ARGBToI420((const uint8_t*)video_data_, width << 2,
-			i420Buf->MutableDataY(), i420Buf->StrideY(),
-			i420Buf->MutableDataU(), i420Buf->StrideU(),
-			i420Buf->MutableDataV(), i420Buf->StrideV(),
-			width, height);
+		uint8_t* src_data;
+		rtc::scoped_refptr<webrtc::VideoFrameBuffer> frame_buf;
+		if (0) {
+			rtc::scoped_refptr<webrtc::I420Buffer> i420Buf(webrtc::I420Buffer::Create(width, height));
+			libyuv::ARGBToI420((const uint8_t*)video_data_, width << 2,
+				i420Buf->MutableDataY(), i420Buf->StrideY(),
+				i420Buf->MutableDataU(), i420Buf->StrideU(),
+				i420Buf->MutableDataV(), i420Buf->StrideV(),
+				width, height);
+			frame_buf = i420Buf;
+			src_data = i420Buf->MutableDataY();
+		} else {
+			rtc::scoped_refptr<webrtc::ArgbBuffer> rgbBuf(webrtc::ArgbBuffer::Create(width, height));
+			memcpy(rgbBuf->MutableDataY(), video_data_, width*height << 2);
+			frame_buf = rgbBuf;
+			src_data = video_data_;
+		}
+		PutVideoData(webrtc::VideoFrame(frame_buf, (webrtc::VideoRotation)kVideoRotation_0, rtc::TimeMicros()));
 
-		//PutVideoData(i420Buf);
-
-		if (encode_on_){
-			if (encoder_->encode(i420Buf->MutableDataY(), (PixelFormat)YUV420, (uint8_t*)data, &out_size, &key_frame, intra_frame_) && out_size > 0){
+		//int64_t begin = rtc::TimeMicros();
+		if (1 && encode_on_){
+			if (encoder_->encode(src_data, (PixelFormat)info_.pix_format, (uint8_t*)data, &out_size, &key_frame, intra_frame_) && out_size > 0){
 				key_frame = (key_frame == 0x0001 ? 1 : 0);
 				data_size = out_size;
 				payload_type = encoder_->get_payload_type();
@@ -311,6 +298,7 @@ int CFVideoRecorder::read(void* data, uint32_t data_size, int& key_frame, uint8_
 				intra_frame_ = false;
 			}
 		}
+		//frame_log(0, __FILE__, __LINE__, "encode cost=%llu\n", rtc::TimeMicros() - begin);
 	}
 
 	return data_size;
@@ -489,9 +477,9 @@ int CFVideoRecorder::GetBestMatchedCapability(const SCaptureDevice& dev, const S
 	return bestformatIndex;
 }
 
-RTCResult CFVideoRecorder::PutVideoData(rtc::scoped_refptr<webrtc::I420Buffer>& i420Buf) {
+RTCResult CFVideoRecorder::PutVideoData(const webrtc::VideoFrame& frame) {
 
-	RTCVideoRender::convertVideoSink(render_)->OnFrame(webrtc::VideoFrame(i420Buf, (webrtc::VideoRotation)kVideoRotation_0, rtc::TimeMicros()));
+	RTCVideoRender::convertVideoSink(render_)->OnFrame(frame);
  
 	return kNoError;
 }
@@ -573,9 +561,10 @@ int CFVideoPlayer::write(const void* data, uint32_t size, uint8_t payload_type)
 
 		decoder_->init(VSampleFormat_I420);
 	}
-
+	//int64_t begin = rtc::TimeMicros();
 	if(decoder_ != NULL && !decoder_->decode((uint8_t *)data, size, &data_, width, height, pic_type))
 		return 0;
+	//frame_log(0, __FILE__, __LINE__, "decode cost=%llu\n", rtc::TimeMicros() - begin);
 
 	frame_count_++;
 
@@ -586,7 +575,7 @@ int CFVideoPlayer::write(const void* data, uint32_t size, uint8_t payload_type)
 	}
 
 	if(nullptr == render_) {
-		render_ = createVideoInternalRender(hwnd_);
+		render_ = createVideoInternalRender(hwnd_, 2);
 	}
 
 	PutVideoData((void*)data_);

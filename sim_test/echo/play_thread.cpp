@@ -7,6 +7,7 @@
 
 #include "play_thread.h"
 #include "sim_external.h"
+#include <assert.h>
 
 VideoPlayhread::VideoPlayhread()
 {

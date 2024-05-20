@@ -20,7 +20,7 @@ typedef struct {
 } CUSTOMVERTEX;
 
 RTCWinVideoRender::RTCWinVideoRender(void * windows, uint32_t option) 
-    : RTCVideoInternalRenderImpl(windows), m_use_gdi_render(option) {
+    : RTCVideoInternalRenderImpl(windows, option) {
     m_hEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
     m_bRending = true;
     DWORD dwThreadId = 0;
@@ -76,15 +76,16 @@ void RTCWinVideoRender::OnFrame(const webrtc::VideoFrame& frame) {
 
     if (frame.width() > MAX_VIDEO_WIDTH || frame.height() > MAX_VIDEO_HEIGHT)
         return;
-    
-    std::lock_guard<std::mutex> lock_guard(m_Lock);
-    m_VideoFrame.reset(new webrtc::VideoFrame(frame));
+    {
+        std::lock_guard<std::mutex> lock_guard(m_Lock);
+        m_VideoFrame.reset(new webrtc::VideoFrame(frame));
+    }
     SetEvent(m_hEvent);
 }
 
 bool RTCWinVideoRender::Initialize(int textureWidth, int textureHeight)
 {
-    if (m_use_gdi_render) {
+    if (m_gdi_render) {
         return false;
     }
 
@@ -319,19 +320,21 @@ void RTCWinVideoRender::D3dRender(unsigned char* pRGBData, int nWidth, int nHeig
         m_lastRotation = degree;
         m_lastScalingMode = mode;
     }
-    HRESULT hr = m_pD3DDevice9->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_XRGB(m_nBkColorR, m_nBkColorG, m_nBkColorB), 1.0f, 0);
+    HRESULT hr /*= m_pD3DDevice9->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_XRGB(m_nBkColorR, m_nBkColorG, m_nBkColorB), 1.0f, 0)*/;
     //copy data
     D3DLOCKED_RECT rect;
     hr = m_pD3DTexture9->LockRect(0, &rect, 0, 0);
     if (SUCCEEDED(hr)) {
-        int nWidthStride = nWidth * nbdp / 8;
+        int nWidthStride = nWidth * nbdp >> 3;
         unsigned char* pSrcData = pRGBData;
         unsigned char* pDstBuff = (unsigned char*)rect.pBits;
+        memcpy(pDstBuff, pSrcData, nWidthStride * nHeight);
+        /*
         for (int i = 0; i < nHeight; i++) {
             memcpy(pDstBuff, pSrcData, nWidthStride);
             pSrcData += nWidthStride;
             pDstBuff += rect.Pitch;
-        }
+        }*/
         m_pD3DTexture9->UnlockRect(0);
     } else {
         LOG_T(LS_ERROR) << "RTCWinVideoRender::D3dRender: LockRect failed, hr=" << hr;
@@ -475,12 +478,11 @@ void RTCWinVideoRender::OnRenderThread() {
         /*DWORD dwRes = */WaitForSingleObject(m_hEvent, 200);
         {
             std::lock_guard<std::mutex> lock_guard(m_Lock);
-            if (nullptr != m_VideoFrame) {
-                frame = std::move(m_VideoFrame);
-            } else {
-                SafeRendBkgnd();
-                continue;
-            }
+            frame = std::move(m_VideoFrame);
+        }
+        if (nullptr == frame) {
+            SafeRendBkgnd();
+            continue;
         }
         
         int nWidth = frame->width();
@@ -501,44 +503,50 @@ void RTCWinVideoRender::OnRenderThread() {
             frameBuffer = frame->video_frame_buffer()->NativeToI420Buffer();
         }
 
-        const uint8_t * y = frameBuffer->DataY();
-        const uint8_t * u = frameBuffer->DataU();
-        const uint8_t * v = frameBuffer->DataV();
-        
-        libyuv::I420ToARGB(y, frameBuffer->StrideY(), u, frameBuffer->StrideU(), v, frameBuffer->StrideV(), rgbData.get(), nWidth << 2, nWidth, nHeight);
-        pVideoData = rgbData.get();
-
-        if (!bD3DInitialed && kVideoRotation_0 != (RTCVideoRotation)frame->rotation()) {
-            bool bSwap = false;
-            int nDstStride = nWidth << 2;
-            libyuv::RotationMode mode = libyuv::kRotate0;
-            if (kVideoRotation_90 == (RTCVideoRotation)frame->rotation()) {
-                mode = libyuv::kRotate90;
-                nDstStride = nHeight << 2;
-                bSwap = true;
-            } else if (kVideoRotation_180 == (RTCVideoRotation)frame->rotation()) {
-                mode = libyuv::kRotate180;
-                nDstStride = nWidth << 2;
-            } else {
-                mode = libyuv::kRotate270;
-                nDstStride = nHeight << 2;
-                bSwap = true;
-            }
-            ARGBRotate(rgbData.get(), nWidth << 2, rgbRotationData.get(), nDstStride, nWidth, nHeight, mode);
-            pVideoData = rgbRotationData.get();
-            if (bSwap) {
-                std::swap(nWidth, nHeight);
-            }
-            if (m_mirror) {
-                libyuv::ARGBMirror(pVideoData, nDstStride, rgbData.get(), nDstStride, nWidth, nHeight);
-                pVideoData = rgbData.get();
-            }
-        } else if (m_mirror) {
-            int nDstStride = nWidth << 2;
-            libyuv::ARGBMirror(pVideoData, nDstStride, rgbRotationData.get(), nDstStride, nWidth, nHeight);
-            pVideoData = rgbRotationData.get();
+        if (!m_yuv) {
+            pVideoData = (unsigned char*)frameBuffer->DataY();
+        } else {
+            const uint8_t * y = frameBuffer->DataY();
+            const uint8_t * u = frameBuffer->DataU();
+            const uint8_t * v = frameBuffer->DataV();
+            
+            libyuv::I420ToARGB(y, frameBuffer->StrideY(), u, frameBuffer->StrideU(), v, frameBuffer->StrideV(), rgbData.get(), nWidth << 2, nWidth, nHeight);
+            pVideoData = rgbData.get();
+			if (!bD3DInitialed && kVideoRotation_0 != (RTCVideoRotation)frame->rotation()) {
+				bool bSwap = false;
+				int nDstStride = nWidth << 2;
+				libyuv::RotationMode mode = libyuv::kRotate0;
+				if (kVideoRotation_90 == (RTCVideoRotation)frame->rotation()) {
+					mode = libyuv::kRotate90;
+					nDstStride = nHeight << 2;
+					bSwap = true;
+				}
+				else if (kVideoRotation_180 == (RTCVideoRotation)frame->rotation()) {
+					mode = libyuv::kRotate180;
+					nDstStride = nWidth << 2;
+				}
+				else {
+					mode = libyuv::kRotate270;
+					nDstStride = nHeight << 2;
+					bSwap = true;
+				}
+				ARGBRotate(rgbData.get(), nWidth << 2, rgbRotationData.get(), nDstStride, nWidth, nHeight, mode);
+				pVideoData = rgbRotationData.get();
+				if (bSwap) {
+					std::swap(nWidth, nHeight);
+				}
+				if (m_mirror) {
+					libyuv::ARGBMirror(pVideoData, nDstStride, rgbData.get(), nDstStride, nWidth, nHeight);
+					pVideoData = rgbData.get();
+				}
+			}
+			else if (m_mirror) {
+				int nDstStride = nWidth << 2;
+				libyuv::ARGBMirror(pVideoData, nDstStride, rgbRotationData.get(), nDstStride, nWidth, nHeight);
+				pVideoData = rgbRotationData.get();
+			}
         }
-
+        
         if (bD3DInitialed)
             D3dRender(pVideoData, nWidth, nHeight, 32, (RTCVideoRotation)frame->rotation(), m_scalingMode);
         else
@@ -551,13 +559,13 @@ void RTCWinVideoRender::SafeRendBkgnd()
 {
     RECT rect;
     HWND hWnd = (HWND)m_window;
-    if (nullptr == hWnd || !::IsWindow(hWnd) || !::IsWindowVisible(hWnd))
-        return;
+   
     GetClientRect(hWnd, &rect);
-    int nWindowWidth = rect.right - rect.left;
+   /* int nWindowWidth = rect.right - rect.left;
     int nWindowHeight = rect.bottom - rect.top;
     if (nWindowWidth <= 0 || nWindowHeight <= 0)
         return;
+    */
     HDC hDC = GetDC(hWnd);
     POINT logical_area = { rect.right, rect.bottom };
     DPtoLP(hDC, &logical_area, 1);

@@ -23,11 +23,11 @@ typedef struct __sim_session sim_session_t;
 
 typedef struct
 {
-	uint32_t			fid;  // frame id
-	uint32_t			last_seq;
-	uint32_t			ts;  // frame send ts
+	uint32_t		fid;  // frame id
+	uint32_t		last_seq;
+	uint32_t		ts;  // frame send ts
 	int					frame_type;  // I P
-
+	
 	int					seg_count;   // received segs
 	int					seg_number;  // total segment count of one frame
 	sim_segment_t**		segments;
@@ -48,14 +48,14 @@ typedef struct __sim_frame_cache
 	uint32_t			frame_timer;	/* The interval between frames*/
 	uint32_t			wait_timer;		/* jitter length，unit ms*/
 
-	int					state;
-	int					loss_flag;
+	int					  state;
+	int					  loss_flag;
 
-	float				f;  // play speed factor 1.0
+	float				  f;  // play speed factor 1.0
 
-	skiplist_t*			discard_loss;
+	skiplist_t*		discard_loss;
 
-	sim_frame_t*		frames; //ring buffer for frame buffer, size = CACHE_SIZE
+	sim_frame_t*	frames; //ring buffer for frame buffer, size = CACHE_SIZE
 }sim_frame_cache_t;
 
 typedef struct __sim_receiver

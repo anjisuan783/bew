@@ -96,6 +96,7 @@ void H264Encoder::config_param()
 {
 	const encoder_resolution_t& res = resolution_infos[curr_resolution_];
 	en_param_.i_threads = X264_THREADS_AUTO;
+	en_param_.b_sliced_threads = 1;
 	en_param_.i_width = res.codec_width;
 	en_param_.i_height = res.codec_height;
 
@@ -183,7 +184,7 @@ bool H264Encoder::encode(uint8_t *in, enum PixelFormat src_pix_fmt, uint8_t *out
 		*out_size = rc;
 		memcpy(out, nal[0].p_payload, rc);
 
-		/*Èç¹ûÊÇintra_refresh·½Ê½£¬½«Ã¿Ò»Ö¡¶¼ÉèÖÃ³É¹Ø¼üÖ¡À´ÊÊÓ¦sim transportµÄ»º³åbuffer*/
+		/*ï¿½ï¿½ï¿½ï¿½ï¿½intra_refreshï¿½ï¿½Ê½ï¿½ï¿½ï¿½ï¿½Ã¿Ò»Ö¡ï¿½ï¿½ï¿½ï¿½ï¿½Ã³É¹Ø¼ï¿½Ö¡ï¿½ï¿½ï¿½ï¿½Ó¦sim transportï¿½Ä»ï¿½ï¿½ï¿½buffer*/
 		if (en_param_.b_intra_refresh == 1)
 			*frame_type = 0x0002;
 		else 

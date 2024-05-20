@@ -91,8 +91,16 @@ void RTCVideoExternalRenderImpl::OnFrame(const webrtc::VideoFrame &frame) {
 }
 
 RTCVideoInternalRenderImpl::RTCVideoInternalRenderImpl(void * window, uint32_t options)
-: m_window(window), m_options(options) {
-    
+: m_window(window) {
+    switch(options) {
+        case 1:
+            m_gdi_render = true;
+            break;
+        case 3:
+            m_gdi_render = true;
+        case 2:
+            m_yuv = true;
+    }
 }
 
 RTCVideoInternalRenderImpl::~RTCVideoInternalRenderImpl() {

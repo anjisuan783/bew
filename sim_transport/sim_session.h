@@ -66,8 +66,8 @@ struct __sim_session
 	int64_t			commad_ts;			/*command timestamp*/
 	int64_t			stat_ts;
 
-	uint64_t		rbandwidth;			/*receive bandwidth*/
-	uint64_t		sbandwidth;			/*send bandwidth*/
+	uint64_t		rbitrate;			/*receive bitrate*/
+	uint64_t		sbitrate;			/*send bitrate*/
 
 	uint64_t		rcount;				/*received packets*/
 	uint64_t		scount;				/*sent packets*/
@@ -115,22 +115,6 @@ int sim_session_network_send(sim_session_t* s, bin_stream_t* strm);
 
 void sim_session_calculate_rtt(sim_session_t* s, uint32_t keep_rtt, int64_t now);
 
-
-void ex_sim_log(int level, const char* file, int line, const char *fmt, ...);
-
-#define sim_debug(...)  				ex_sim_log(0, __FILE__, __LINE__, __VA_ARGS__)
-#define sim_info(...)    				ex_sim_log(1, __FILE__, __LINE__, __VA_ARGS__)
-#define sim_warn(...)					ex_sim_log(2, __FILE__, __LINE__, __VA_ARGS__)
-#define sim_error(...)   				ex_sim_log(3, __FILE__, __LINE__, __VA_ARGS__)
-
-#define msg_log(addr, ...)						\
-do{												\
-	char ip[IP_SIZE] = { 0 };					\
-	su_addr_to_string((addr), ip, IP_SIZE);		\
-	sim_info(__VA_ARGS__);						\
-} while (0)
-
 #endif
 
-
-
+#include "session_log.h"

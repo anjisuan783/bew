@@ -38,5 +38,6 @@ public:
     
 protected:
     void           *m_window;
-    uint32_t        m_options;
+    bool  m_gdi_render = false;
+    bool  m_yuv = false;
 };

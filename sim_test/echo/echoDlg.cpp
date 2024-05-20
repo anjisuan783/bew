@@ -385,7 +385,7 @@ void CechoDlg::OnBnClickedBtnview()
 
 		video_info_t info;
 		info.pix_format = RGB24;
-		info.rate = 0;
+		info.rate = 30;
 		info.codec = GetCodec();
 		info.width = resolution_infos[i].codec_width;
 		info.height = resolution_infos[i].codec_height;
@@ -393,14 +393,10 @@ void CechoDlg::OnBnClickedBtnview()
 		info.codec_height = resolution_infos[i].codec_height;
 		m_viRecorder->set_video_info(info);
 
-		RECT display_rect;
-		m_srcVideo.GetClientRect(&display_rect);
-
-		m_viRecorder->set_view_hwnd(m_srcVideo.GetSafeHwnd(), display_rect);
+		m_viRecorder->set_view_hwnd(m_srcVideo.GetSafeHwnd());
 		m_strDev.ReleaseBuffer();
 		m_viRecorder->open();
 
-		//m_dstVideo.GetClientRect(&display_rect);
 		m_viPlayer = new CFVideoPlayer(m_dstVideo.GetSafeHwnd());
 		m_viPlayer->open();
 
@@ -488,7 +484,7 @@ LRESULT CechoDlg::OnConnectSucc(WPARAM wparam, LPARAM lparam)
 
 	video_info_t info;
 	info.pix_format = RGB24;
-	info.rate = 0;
+	info.rate = 30;
 	info.codec = GetCodec();
 	info.width = resolution_infos[i].codec_width;
 	info.height = resolution_infos[i].codec_height;
@@ -496,10 +492,7 @@ LRESULT CechoDlg::OnConnectSucc(WPARAM wparam, LPARAM lparam)
 	info.codec_height = resolution_infos[i].codec_height;
 	m_viRecorder->set_video_info(info);
 
-	RECT display_rect;
-	m_srcVideo.GetClientRect(&display_rect);
-
-	m_viRecorder->set_view_hwnd(m_srcVideo.GetSafeHwnd(), display_rect);
+	m_viRecorder->set_view_hwnd(m_srcVideo.GetSafeHwnd());
 	m_strDev.ReleaseBuffer();
 	m_viRecorder->open();
 

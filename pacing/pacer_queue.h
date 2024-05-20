@@ -31,20 +31,20 @@ typedef struct
 	base_list_t*	l;				/*time ordered list*/
 }pacer_queue_t;
 
-void					pacer_queue_init(pacer_queue_t* que, uint32_t que_ms);
-void					pacer_queue_destroy(pacer_queue_t* que);
+void pacer_queue_init(pacer_queue_t* que, uint32_t que_ms);
+void pacer_queue_destroy(pacer_queue_t* que);
 
-int						pacer_queue_push(pacer_queue_t* que, packet_event_t* ev);
+int pacer_queue_push(pacer_queue_t* que, packet_event_t* ev);
 /*获取que中最小seq的包，按顺序发出，这样防止出现大范围的抖动*/
 packet_event_t*			pacer_queue_front(pacer_queue_t* que);
-void					pacer_queue_sent_by_id(pacer_queue_t* que, uint32_t id);
-void					pacer_queue_sent(pacer_queue_t* que, packet_event_t* ev);
+void pacer_queue_sent_by_id(pacer_queue_t* que, uint32_t id);
+void pacer_queue_sent(pacer_queue_t* que, packet_event_t* ev);
 
-int						pacer_queue_empty(pacer_queue_t* que);
-size_t					pacer_queue_bytes(pacer_queue_t* que);
-int64_t					pacer_queue_oldest(pacer_queue_t* que);
+int pacer_queue_empty(pacer_queue_t* que);
+size_t pacer_queue_bytes(pacer_queue_t* que);
+int64_t pacer_queue_oldest(pacer_queue_t* que);
 /*计算que需要的码率*/
-uint32_t				pacer_queue_target_bitrate_kbps(pacer_queue_t* que, int64_t now_ts);
+uint32_t pacer_queue_target_bitrate_kbps(pacer_queue_t* que, int64_t now_ts);
 
 #endif
 

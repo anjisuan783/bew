@@ -15,6 +15,7 @@
 #include "exp_filter.h"
 #include "call_stats.h"
 #include "clock.h"
+#include "jitter_buffer.h"
 
 
 //state
@@ -138,8 +139,8 @@ static void sim_session_reset(sim_session_t* s)
 	s->loss_fraction = 0;
 	s->scid = rand();
 	s->rcid = 0;
-	s->rbandwidth = 0;
-	s->sbandwidth = 0;
+	s->rbitrate = 0;
+	s->sbitrate = 0;
 	s->rcount = 0;
 	s->scount = 0;
 	s->video_bytes = 0;
@@ -323,7 +324,7 @@ int sim_session_network_send(sim_session_t* s, bin_stream_t* strm)
 	if (s->s < 0 || strm->used <= 0)
 		return -1;
 	
-	s->sbandwidth += strm->used;
+	s->sbitrate += strm->used;
 	s->scount++;
 
 	return su_udp_send(s->s, &s->peer, strm->data, strm->used);
@@ -357,9 +358,41 @@ void sim_session_calculate_rtt(sim_session_t* s, uint32_t keep_rtt, int64_t now)
 		sim_receiver_update_rtt(s, s->receiver);
 }
 
+/*
+#define THREAD_BASE_PRIORITY_LOWRT  15  // value that gets a thread to LowRealtime-1
+#define THREAD_BASE_PRIORITY_MAX    2   // maximum thread base priority boost
+
+#define THREAD_PRIORITY_LOWEST          THREAD_BASE_PRIORITY_MIN
+#define THREAD_PRIORITY_BELOW_NORMAL    (THREAD_PRIORITY_LOWEST+1)
+#define THREAD_PRIORITY_NORMAL          0
+#define THREAD_PRIORITY_HIGHEST         THREAD_BASE_PRIORITY_MAX
+#define THREAD_PRIORITY_ABOVE_NORMAL    (THREAD_PRIORITY_HIGHEST-1)
+*/
+#ifdef WIN32
+enum {
+	LOWEST = THREAD_BASE_PRIORITY_MIN,
+	BELOW_NORMAL = THREAD_PRIORITY_LOWEST,
+	NORMAL = 0,
+	ABOVE_NORMAL = THREAD_PRIORITY_HIGHEST - 1,
+	HIGHEST = THREAD_BASE_PRIORITY_MAX
+};
+#endif
+
+void SetThreadPriority(int priority) {
+#ifdef WIN32
+	HANDLE hThread = GetCurrentThread();
+	BOOL success = SetThreadPriority(hThread, priority);
+
+	assert(success);
+#endif
+}
+
 static void* sim_session_loop_event(void* arg)
 {
 	sim_session_t* s = (sim_session_t*)arg;
+
+	SetThreadPriority(HIGHEST);
+
 	bin_stream_t rstrm;
 	su_addr peer;
 	int rc;
@@ -380,7 +413,7 @@ static void* sim_session_loop_event(void* arg)
 			rstrm.used = rc;
 
 			su_mutex_lock(s->mutex);
-			s->rbandwidth += rc;
+			s->rbitrate += rc;
 			s->rcount++;
 			sim_session_process(s, &rstrm, &peer);
 			su_mutex_unlock(s->mutex);
@@ -532,7 +565,7 @@ static void process_sim_pong(sim_session_t* s, sim_header_t* header, bin_stream_
 	int64_t now = GET_SYS_MS();
 	int64_t diff_ts = now - pong.ts;
 	//sim_session_calculate_rtt(s, SU_MAX(diff_ts, 5));
-	sim_session_calculate_rtt(s, diff_ts, now);
+	sim_session_calculate_rtt(s, static_cast<uint32_t>(diff_ts), now);
 }
 
 static void process_sim_seg(sim_session_t* s, sim_header_t* header, bin_stream_t* strm, su_addr* addr)
@@ -729,22 +762,24 @@ static void sim_session_state_timer(sim_session_t* s, int64_t now_ts, sim_sessio
 		uint32_t cache_delay = 0;
 		uint32_t jitter_ts = 0;
 		uint32_t interval_ts = 0;
+		uint32_t e_jitter = 0;
 		if (s->receiver) {
 			cache_delay = sim_receiver_cache_delay(s, s->receiver);
 			jitter_ts = s->receiver->cache->wait_timer;
 			interval_ts = s->receiver->cache->frame_timer;
+			e_jitter = s->receiver->jitter->EstimatedJitterMs();
 		}
 
 		if (s->state_cb != NULL){
 			snprintf(info, SIM_INFO_SIZE,
-				"video rate=%ukb/s, send=%ukb/s, recv=%ukb/s, fec=%ukb/s, rtt=%d+%d, max frame size=%uKB, pacer delay=%u, cache delay=%u interval=%u, jitter=%u, lost=%.2f, rtt_avg=%lld, rtt_max=%lld",
+				"video rate=%ukb/s, send=%ukb/s, recv=%ukb/s, fec=%ukb/s, rtt=%d+%d, maxfsize=%uKB, pacer delay=%u, cache delay=%u interval=%u, jitter=%u, lost=%.2f, rtt_am=%lld-%lld, ejitter=%u",
 					(uint32_t)(s->video_bytes * 1000 * 8 / delay), 
-					(uint32_t)(s->sbandwidth * 1000 * 8 / delay), 
-					(uint32_t)(s->rbandwidth * 1000 * 8 / delay), 
+					(uint32_t)(s->sbitrate * 1000 * 8 / delay), 
+					(uint32_t)(s->rbitrate * 1000 * 8 / delay), 
 					(uint32_t)(s->fec_bytes * 1000 * 8 / delay), 
-					s->rtt, s->rtt_var, (s->max_frame_size >> 10), 
+					s->rtt, s->rtt_var, (s->max_frame_size >> 10),
 					pacer_ms, cache_delay, interval_ts, jitter_ts, s->exp_filter->filtered()*100,
-					s->stats->avg_rtt_ms(), s->stats->max_rtt_ms());
+					s->stats->avg_rtt_ms(), s->stats->max_rtt_ms(), e_jitter);
 			s->state_cb(s->event, info);
 		}
 
@@ -752,15 +787,15 @@ static void sim_session_state_timer(sim_session_t* s, int64_t now_ts, sim_sessio
 			sim_info("sim transport, send count = %u, recv count = %u, send bandwidth = %ukb/s, recv bandwidth = %ukb/s, rtt = %d, video rate = %ukb/s, pacer delay = %ums, loss=%u\n",
 					(uint32_t)(s->scount), 
 					(uint32_t)(s->rcount), 
-					(uint32_t)(s->sbandwidth * 1000 * 8 / delay),
-					(uint32_t)(s->rbandwidth * 1000 * 8 / delay), 
+					(uint32_t)(s->sbitrate * 1000 * 8 / delay),
+					(uint32_t)(s->rbitrate * 1000 * 8 / delay), 
 					s->rtt + s->rtt_var, 
 					(uint32_t)(s->video_bytes * 1000 * 8 / delay), 
 					pacer_ms, s->loss_fraction);
 		}
 
-		s->rbandwidth = 0;
-		s->sbandwidth = 0;
+		s->rbitrate = 0;
+		s->sbitrate = 0;
 		s->scount = 0;
 		s->rcount = 0;
 		s->video_bytes = 0;

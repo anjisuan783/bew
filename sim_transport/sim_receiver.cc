@@ -114,7 +114,7 @@ static int evict_gop_frame(sim_session_t* s, sim_frame_cache_t* c)
 	return 0;
 }
 
-static inline int real_video_cache_check_frame_full(sim_session_t* s, sim_frame_t* frame)
+static inline int real_video_cache_check_frame_full(sim_frame_t* frame)
 {
 	return (frame->seg_number == frame->seg_count) ? 0 : -1;
 }
@@ -132,7 +132,7 @@ static void real_video_cache_evict_discard(sim_session_t* s, sim_frame_cache_t* 
 
 	pos = INDEX(c->min_fid + 1);
 	frame = &c->frames[pos];
-	if ((c->min_fid + 1 == frame->fid || frame->frame_type == 1) && real_video_cache_check_frame_full(s, frame) == 0)
+	if ((c->min_fid + 1 == frame->fid || frame->frame_type == 1) && real_video_cache_check_frame_full(frame) == 0)
 		return;
 
 	for (i = c->min_fid + 1; i <= c->max_fid; ++i){
@@ -230,6 +230,7 @@ static int real_video_cache_put(sim_session_t* s, sim_frame_cache_t* c, sim_segm
 {
 	sim_frame_t* frame;
 	int ret = -1;
+	int i, size;
 
 	// valid check
 	if (seg->index >= seg->total || seg->fid <= c->min_fid){
@@ -276,6 +277,15 @@ static int real_video_cache_put(sim_session_t* s, sim_frame_cache_t* c, sim_segm
 			frame->segments[seg->index] = seg;
 			frame->seg_count++;
 			ret = 0;
+
+			if (0 == real_video_cache_check_frame_full(frame)) {
+				// calcu frame size
+				size = 0;
+				for (i = 0; i < frame->seg_number; ++i) {
+					size += frame->segments[i]->data_size;
+				}
+				s->receiver->jitter->UpdateJitterEstimate(seg->recv_ts, frame->ts, size, false);
+			}
 		} // else duplicate segment will be free
 	}
 
@@ -317,7 +327,7 @@ static uint32_t real_video_ready_ms(sim_session_t* s, sim_frame_cache_t* c)
 	max_ready_ts = 0; // last frame ts
 	for (i = c->min_fid + 1; i <= c->max_fid; ++i){
 		frame = &c->frames[INDEX(i)];
-		if (frame->seg_count == frame->seg_number){
+		if (0 == real_video_cache_check_frame_full(frame)){
 			if (min_ready_ts == 0)
 				min_ready_ts = frame->ts;
 			max_ready_ts = frame->ts;
@@ -345,7 +355,7 @@ static int real_video_check_fir(sim_session_t* s, sim_frame_cache_t* c)
 	pos = INDEX(c->min_fid + 1);
 	frame = &c->frames[pos];
 
-	if (real_video_cache_check_frame_full(s, frame) == 0)
+	if (real_video_cache_check_frame_full(frame) == 0)
 		return -1;
 
 	if (c->play_frame_ts + MAX_EVICT_DELAY_MS * 3 / 5 > c->max_ts)
@@ -403,7 +413,7 @@ static int real_video_cache_get(sim_session_t* s, sim_frame_cache_t* c, uint8_t*
 
 	//real_video_cache_evict_discard(s, c);
 	frame = &c->frames[INDEX(c->min_fid + 1)];
-	if ((c->min_fid + 1 == frame->fid || frame->frame_type == 1) && real_video_cache_check_frame_full(s, frame) == 0){
+	if ((c->min_fid + 1 == frame->fid || frame->frame_type == 1) && real_video_cache_check_frame_full(frame) == 0){
 #ifndef DISABLE_JITTER	
 		if (frame->ts > c->frame_ts + SU_MAX(500, 2 * space) && play_ready_ts > space) {
 			c->frame_ts = frame->ts - space;
@@ -689,7 +699,7 @@ static int sim_receiver_internal_put(sim_session_t* s, sim_receiver_t* r, sim_se
 	return 0;
 }
 
-static void sim_receiver_recover(sim_session_t* s, sim_receiver_t* r)
+static void sim_receiver_recover(sim_session_t* s, sim_receiver_t* r, int64_t recv_ts)
 {
 	skiplist_iter_t* iter;
 	skiplist_t* recover_map;
@@ -702,6 +712,7 @@ static void sim_receiver_recover(sim_session_t* s, sim_receiver_t* r)
 
 		in_seg = (sim_segment_t*)malloc(sizeof(sim_segment_t));
 		*in_seg = *seg;
+		in_seg->recv_ts = recv_ts;
 
 		skiplist_remove(recover_map, iter->key);
 
@@ -839,7 +850,7 @@ int sim_receiver_put(sim_session_t* s, sim_receiver_t* r, sim_segment_t* seg)
 	//FEC recover
 	if (r->recover != NULL && seg->fec_id > 0){
 		sim_fec_put_segment(s, r->recover, seg);
-		sim_receiver_recover(s, r);
+		sim_receiver_recover(s, r, seg->recv_ts);
 	}
 
 	video_real_ack(s, r, 0, seg->packet_id);
@@ -854,7 +865,7 @@ int sim_receiver_put_fec(sim_session_t* s, sim_receiver_t* r, sim_fec_t* fec)
 
 	if (r->recover != NULL){
 		sim_fec_put_fec_packet(s, r->recover, fec);
-		sim_receiver_recover(s, r);
+		sim_receiver_recover(s, r, fec->recv_ts);
 	}
 
 	return 0;

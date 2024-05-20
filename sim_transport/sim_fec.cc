@@ -160,7 +160,6 @@ void sim_fec_put_fec_packet(sim_session_t* s, sim_receiver_fec_t* f, sim_fec_t* 
 		flex->fec_ts = fec->send_ts;
 		flex_fec_receiver_active(flex, fec->fec_id, fec->col, fec->row, fec->base_id, fec->count);
 
-		/*���Ѿ���segs�е�segments����FLEX��*/
 		sim_fec_add_segment_to_flex(s, f, flex, fec);
 	}
 	else
@@ -199,7 +198,6 @@ void sim_fec_put_segment(sim_session_t* s, sim_receiver_fec_t* f, sim_segment_t*
 	while (list_size(f->out) > 0)
 		sim_fec_packet_add_recover(s, f, (sim_segment_t*)list_pop(f->out));
 	
-	/*����Ѿ�����ˣ��ͷŵ�FEC����*/
 	if (flex_fec_receiver_full((flex_fec_receiver_t*)iter->val.ptr) == 0){
 		sim_fec_evict_segment(s, f, (flex_fec_receiver_t*)iter->val.ptr);
 		skiplist_remove(f->flexes, iter->key);

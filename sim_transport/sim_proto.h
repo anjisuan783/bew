@@ -94,6 +94,7 @@ typedef struct
 
 	uint16_t	data_size;      /* segment meta length */
 	uint8_t		data[SIM_VIDEO_SIZE]; /* segment meta data */
+	uint64_t  recv_ts;
 }sim_segment_t;
 
 #define SIM_SEGMENT_HEADER_SIZE (SIM_HEADER_SIZE + 24)
@@ -167,6 +168,8 @@ typedef struct
 
 	uint16_t		fec_data_size;  /* fec packet length, the max size of the segments */
 	uint8_t			fec_data[SIM_VIDEO_SIZE];
+
+	int64_t   recv_ts;
 }sim_fec_t;
 
 void sim_encode_msg(bin_stream_t* strm, sim_header_t* header, void* body);

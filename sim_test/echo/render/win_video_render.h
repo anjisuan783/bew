@@ -59,5 +59,4 @@ private:
     RTCVideoRotation m_lastRotation;
     RTCVideoScalingMode m_lastScalingMode;
     std::unique_ptr<webrtc::VideoFrame>   m_VideoFrame;
-    uint32_t m_use_gdi_render;
 };
