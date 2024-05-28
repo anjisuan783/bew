@@ -32,13 +32,11 @@ void VideoRecordhread::run()
 
 	data = (uint8_t*)malloc(rc * sizeof(uint8_t));
 
-	while (m_run_flag){
-		if (rec_ != NULL){
-			size = rec_->read(data, rc, key, payload_type);
-			if (size > 0)
-				sim_send_video(payload_type, key, data, size);
+	while (m_run_flag && rec_) {
+		if ((size = rec_->read(data, rc, key, payload_type)) > 0) {
+			sim_send_video(payload_type, key, data, size);
 		}
-
+	
 		Sleep(1);
 	}
 

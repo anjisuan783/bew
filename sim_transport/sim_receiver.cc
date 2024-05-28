@@ -7,13 +7,18 @@
 
 #include "sim_receiver.h"
 
+#include <algorithm>
+#include <limits>
 #include <assert.h>
 
+#include "webrtc/base/mod_ops.h"
 #include "sim_session.h"
 #include "jitter_buffer.h"
 #include "call_stats.h"
 
-#define DISABLE_JITTER
+//#define DISABLE_JITTER
+
+#define USE_JITTER_ESTMITOR
 
 enum {
 	buffer_waiting = 0,  // init state
@@ -32,13 +37,56 @@ enum {
 
 const uint32_t kMaxJitterDelayNoLost = 10;
 
+const int kMaxNackRetries = 10;
+
+namespace webrtc {
+template <typename T, T M>
+inline bool AheadOrAt(T a, T b) {
+  static_assert(std::is_unsigned<T>::value,
+                "Type must be an unsigned integer.");
+  const T maxDist = M / 2;
+  if (!(M & 1) && MinDiff<T, M>(a, b) == maxDist)
+    return b < a;
+  return ForwardDiff<T, M>(b, a) <= maxDist;
+}
+
+template <typename T>
+inline bool AheadOrAt(T a, T b) {
+  static_assert(std::is_unsigned<T>::value,
+                "Type must be an unsigned integer.");
+  const T maxDist = std::numeric_limits<T>::max() / 2 + T(1);
+  if (a - b == maxDist)
+    return b < a;
+  return ForwardDiff(b, a) < maxDist;
+}
+
+// Test if the sequence number |a| is ahead of sequence number |b|. (a newer than b)
+//
+// If |M| is an even number and the two sequence numbers are at max distance
+// from each other, then the sequence number with the highest value is
+// considered to be ahead.
+template <typename T, T M>
+inline bool AheadOf(T a, T b) {
+  static_assert(std::is_unsigned<T>::value,
+                "Type must be an unsigned integer.");
+  return a != b && AheadOrAt<T, M>(a, b);
+}
+
+template <typename T>
+inline bool AheadOf(T a, T b) {
+  static_assert(std::is_unsigned<T>::value,
+                "Type must be an unsigned integer.");
+  return a != b && AheadOrAt(a, b);
+}
+}
+
 static void sim_receiver_send_fir(sim_session_t* s, sim_receiver_t* r);
 
 /*************************************play buffer ******************************************************/
 static sim_frame_cache_t* open_real_video_cache(sim_session_t* s)
 {
 	sim_frame_cache_t* c = (sim_frame_cache_t*)calloc(1, sizeof(sim_frame_cache_t));
-	c->wait_timer = s->rtt + 2 * s->rtt_var;
+	c->wait_timer = 50;
 	c->state = buffer_waiting;
 	c->min_seq = 0;
 	c->frame_timer = 100;
@@ -73,6 +121,8 @@ static inline void real_video_clean_frame(sim_session_t* session, sim_frame_cach
 	frame->frame_type = 0;
 	frame->seg_number = 0;
 	frame->seg_count = 0;
+	frame->nack_count = 0;
+	frame->size = 0;
 
 	c->min_fid = frame->fid;
 
@@ -87,10 +137,10 @@ static inline void real_video_clean_frame(sim_session_t* session, sim_frame_cach
 
 static int evict_gop_frame(sim_session_t* s, sim_frame_cache_t* c)
 {
-	uint32_t i, key_frame_id;
+	uint32_t i;
 	sim_frame_t* frame = NULL;
 	
-	key_frame_id = 0;
+	uint32_t key_frame_id = 0;
 	// look for key frame, from the sencod, first one must be evict
 	for (i = c->min_fid + 2; i < c->max_fid; ++i){
 		frame = &c->frames[INDEX(i)];
@@ -201,8 +251,7 @@ static void reset_real_video_cache(sim_session_t* s, sim_frame_cache_t* c)
 	c->f = 1.0f;
 
 	c->state = buffer_waiting;
-	c->wait_timer = SU_MAX(100, s->rtt + 2 * s->rtt_var);
-	c->loss_flag = 0;
+	c->wait_timer = SU_MAX(50, s->stats->max_rtt_ms());
 
 	skiplist_clear(c->discard_loss);
 }
@@ -230,7 +279,8 @@ static int real_video_cache_put(sim_session_t* s, sim_frame_cache_t* c, sim_segm
 {
 	sim_frame_t* frame;
 	int ret = -1;
-	int i, size;
+	int i;
+	bool duplicate = false;
 
 	// valid check
 	if (seg->index >= seg->total || seg->fid <= c->min_fid){
@@ -259,8 +309,6 @@ static int real_video_cache_put(sim_session_t* s, sim_frame_cache_t* c, sim_segm
 		c->max_fid = seg->fid;
 	}
 
-	//sim_debug("buffer put video frame, frame = %u, packet_id = %u\n", seg->fid, seg->packet_id);
-
 	frame = &(c->frames[INDEX(seg->fid)]);
 	frame->fid = seg->fid;
 	frame->frame_type = seg->ftype;
@@ -271,33 +319,42 @@ static int real_video_cache_put(sim_session_t* s, sim_frame_cache_t* c, sim_segm
 		frame->seg_number = seg->total;
 		frame->segments = (sim_segment_t**)calloc(frame->seg_number, sizeof(seg));
 		frame->segments[seg->index] = seg;
+		frame->nack_count = 0;
+		frame->size = seg->data_size;
 		ret = 0;
 	} else { // next seg of the frame
 		if (frame->segments[seg->index] == NULL){
 			frame->segments[seg->index] = seg;
 			frame->seg_count++;
+			frame->size += seg->data_size;
 			ret = 0;
-
-			if (0 == real_video_cache_check_frame_full(frame)) {
-				// calcu frame size
-				size = 0;
-				for (i = 0; i < frame->seg_number; ++i) {
-					size += frame->segments[i]->data_size;
-				}
-				s->receiver->jitter->UpdateJitterEstimate(seg->recv_ts, frame->ts, size, false);
-			}
-		} // else duplicate segment will be free
+		} else { // else duplicate segment will be free
+			duplicate = true;
+		}
 	}
-
+#ifdef USE_JITTER_ESTMITOR
+	if (!duplicate && 0 == real_video_cache_check_frame_full(frame) && frame->nack_count <= 0) {
+		// update jitter
+		int64_t now = GET_SYS_MS();
+		s->receiver->jitter->UpdateJitterEstimate(now, frame->ts * 90, frame->size);
+		uint32_t f_delay = s->receiver->jitter->EstimatedJitterMs();
+		s->receiver->cache->wait_timer = f_delay;
+		sim_debug("real_video_cache_put fid=%u f_delay=%u fsize=%u\n", frame->fid, f_delay, frame->size);
+	}
+#endif
+	if (!duplicate && 0 == real_video_cache_check_frame_full(frame)) {
+		sim_debug("real_video_cache_put fid=%u fsize=%u\n", frame->fid, frame->size);
+	}
+	sim_debug("buffer put video frame, frame=%u, packet_id=%u\n", seg->fid, seg->packet_id);
 	return ret;
 }
 
 static void real_video_cache_check_playing(sim_session_t* s, sim_frame_cache_t* c)
 {
-	uint32_t space = SU_MAX(c->wait_timer, c->frame_timer);
-
 	if (c->max_fid <= c->min_fid)
 		return ;
+		
+	uint32_t space = SU_MAX(c->wait_timer, c->frame_timer);
 	if (c->max_ts >= c->play_frame_ts + space && c->max_fid >= c->min_fid + 1){
 		c->state = buffer_playing;
 
@@ -340,7 +397,7 @@ static uint32_t real_video_ready_ms(sim_session_t* s, sim_frame_cache_t* c)
 		ret = max_ready_ts - min_ready_ts + c->frame_timer;
 
 	if (count > 1) {
-		sim_debug("real_video_ready_ms more than one frame ready=%u ts=%ums\n", count, ret);
+		//sim_debug("real_video_ready_ms more than one frame ready=%u ts=%ums\n", count, ret);
 	}
 
 	return ret;
@@ -398,12 +455,12 @@ static int real_video_cache_get(sim_session_t* s, sim_frame_cache_t* c, uint8_t*
 		c->f = 0.6f;
 	else if (play_ready_ts > c->frame_timer * 4 && play_ready_ts > MIN_EVICT_DELAY_MS / 2)
 		c->f = 3.0f;
-	else if (play_ready_ts >= space /*&& play_ready_ts >= SU_MAX(kMaxJitterDelayNoLost, c->frame_timer)*/)
-		c->f = 1.5f;
+	else if (play_ready_ts >= space && play_ready_ts >= SU_MAX(kMaxJitterDelayNoLost, c->frame_timer))
+		c->f = 1.2f;
 
 	real_video_cache_sync_timestamp(s, c);
 
-	 if (c->min_fid == c->max_fid)
+	if (c->min_fid == c->max_fid)
 		goto err;
 
 	// 4xjitter len < clean time < 3s
@@ -415,7 +472,8 @@ static int real_video_cache_get(sim_session_t* s, sim_frame_cache_t* c, uint8_t*
 	frame = &c->frames[INDEX(c->min_fid + 1)];
 	if ((c->min_fid + 1 == frame->fid || frame->frame_type == 1) && real_video_cache_check_frame_full(frame) == 0){
 #ifndef DISABLE_JITTER	
-		if (frame->ts > c->frame_ts + SU_MAX(500, 2 * space) && play_ready_ts > space) {
+		if (play_ready_ts > space && frame->ts > c->frame_ts + SU_MAX(500, 2 * space)) {
+			// faster play ts
 			c->frame_ts = frame->ts - space;
 		} else if (frame->ts <= c->frame_ts) {
 #endif
@@ -448,7 +506,7 @@ err:
 	return ret;
 }
 
-static uint32_t real_video_cache_delay(sim_session_t* s, sim_frame_cache_t* c)
+inline static uint32_t real_video_cache_delay(sim_session_t* s, sim_frame_cache_t* c)
 {
 	if (c->max_fid <= c->min_fid)
 		return 0;
@@ -462,6 +520,7 @@ typedef struct
 	int64_t				loss_ts;  // lost time now
 	int64_t				ts;				// nack time
 	int					  count;      // nack count
+	uint32_t      fid;
 }sim_loss_t;
 
 static void loss_free(skiplist_item_t key, skiplist_item_t val, void* args)
@@ -512,35 +571,37 @@ static void sim_receiver_send_fir(sim_session_t* s, sim_receiver_t* r)
 		r->fir_ts = cur_ts;
 	}
 }
-
-static void sim_receiver_update_loss(sim_session_t* s, sim_receiver_t* r, uint32_t seq, uint32_t ts)
+#define NACK_MAX_TICK 3000
+static void sim_receiver_update_loss(sim_session_t* s, sim_receiver_t* r, sim_segment_t* seg)
 {
 	uint32_t i, space;
 	skiplist_item_t key, val;
 	skiplist_iter_t* iter;
 	int64_t now_ts;
 
+	uint32_t seq = seg->packet_id;
+	uint32_t fid = seg->fid;
 	key.u32 = seq;
 	skiplist_remove(r->loss, key);
 
 	now_ts = GET_SYS_MS();
-	if (r->max_ts + 3000 < ts || s->rtt >= CACHE_MAX_DELAY){
-		// 3s fir
+	if (r->max_ts + NACK_MAX_TICK < seg->timestamp || s->stats->avg_rtt_ms() >= CACHE_MAX_DELAY){
+		// 3s no segment received, or rtt > CACHE_MAX_DELAY use fir instead of nack
 		skiplist_clear(r->loss);
 		sim_receiver_send_fir(s, r);
 		return ;
 	}
 
-	space = s->rtt/2<s->rtt_var ? (s->rtt_var + s->rtt)/2 : s->rtt;
-
+	// insert nack list
 	for (i = r->max_seq + 1; i < seq; ++i){
 		key.u32 = i;
 		iter = skiplist_search(r->loss, key);
-		if (iter == NULL) {
+		if (iter == NULL) { 
 			sim_loss_t* l = (sim_loss_t*)calloc(1, sizeof(sim_loss_t));
-			l->ts = now_ts - space;
+			l->ts = -1;
 			l->loss_ts = now_ts;
 			l->count = 0;
+			l->fid = fid;
 			val.ptr = l;
 
 			skiplist_insert(r->loss, key, val);
@@ -557,7 +618,9 @@ static inline void sim_receiver_send_ack(sim_session_t* s, sim_receiver_t* r, si
 
 	ack->ack_num = 0;
 
+	// nack hole existed
 	if (r->base_seq < r->max_seq){
+		// calculate ack list
 		count = r->acked_count >= ACK_NUM ? ACK_NUM : r->acked_count;
 		for (i = 0; i < count; ++i){
 			if (r->base_seq < r->ackeds[i])
@@ -599,69 +662,108 @@ static void video_real_ack(sim_session_t* s, sim_receiver_t* r, int heartbeat, u
 	skiplist_item_t key;
 	sim_loss_t* l;
 	uint32_t delay, space_factor;
+	skiplist_t* outofdate_nacklist = nullptr;
 	int max_count = 0;
 
 	uint32_t numbers[NACK_NUM];
 	int i, evict_count = 0;
-
+	
 	cur_ts = GET_SYS_MS();
 	
+	bool sequence_based = heartbeat == 0;
 	// heartbeat trigger ack every 200ms
 	// packet arriving trigger ack every 20ms
-	if ((heartbeat == 0 && r->ack_ts + ACK_REAL_TIME < cur_ts) || (r->ack_ts + ACK_HB_TIME < cur_ts)){
-		ack.acked_packet_id = seq;
+	space_factor = s->stats->max_rtt_ms();
+	if (sequence_based || (r->ack_ts + space_factor < cur_ts)){		
+		ack.acked_packet_id = seq; // calculate rtt using ack on fec mode
 		video_real_update_base(s, r);
 
 		ack.base_packet_id = r->base_seq;
 		ack.nack_num = 0;
+		if (r->loss->size > 1000)
+			sim_info("video_real_ack, lost size=%u \n", r->loss->size);
+			
 		SKIPLIST_FOREACH(r->loss, iter) {
-			l = (sim_loss_t*)iter->val.ptr;
-
+			// out of date nack
 			if (iter->key.u32 <= r->base_seq)
 				continue;
 
-			/* preventing flood GET */
-			space_factor = SU_MAX(10, s->rtt + s->rtt_var) + l->count * SU_MIN(100, SU_MAX(10, s->rtt_var)); 
-			if (l->count >= 15 || l->loss_ts + MIN_EVICT_DELAY_MS / 2 < cur_ts){
-				if (evict_count < NACK_NUM)
-					numbers[evict_count++] = iter->key.u32;
-			} else if (l->ts + space_factor <= cur_ts && ack.nack_num < NACK_NUM){
+			l = (sim_loss_t*)iter->val.ptr;
+
+			if ((sequence_based && -1 == l->ts && webrtc::AheadOf(r->max_seq, iter->key.u32)) ||
+					(/*time_based && -1!= l->ts && */l->ts + space_factor < cur_ts)) {
+				l->count++;
+				if (l->count >= kMaxNackRetries) {
+					if (!outofdate_nacklist) {
+						outofdate_nacklist = skiplist_create(idu32_compare, NULL, NULL);
+					}
+					key.u32 = iter->key.u32;
+					skiplist_item_t v;
+					v.u32 = iter->key.u32;
+					skiplist_insert(outofdate_nacklist, key, v);
+					continue;
+				}
 				ack.nack[ack.nack_num++] = iter->key.u32 - r->base_seq;
 				l->ts = cur_ts;
-
 				r->loss_count++;
-				l->count++;
+
+				// update frame nack count
+				sim_frame_t* frame = &(r->cache->frames[INDEX(l->fid)]);
+				if (frame->seg_count > 0) {
+					frame->nack_count++;
+				}
 			}
 
 			if (l->count > max_count)
 				max_count = l->count;
+
+			if (ack.nack_num >= NACK_NUM) {
+				sim_info("video_real_ack, ack.nack_num >= NACK_NUM \n");
+				break;
+			}
 		}
 
-		if (s->rtt >= CACHE_MAX_DELAY && ack.nack_num > 0){
+		if (s->stats->avg_rtt_ms() >= CACHE_MAX_DELAY && ack.nack_num > 0){
 			skiplist_clear(r->loss);
 			sim_receiver_send_fir(s, r);
 
 			ack.nack_num = 0;
 		}
+
+		if (outofdate_nacklist) {
+			if (skiplist_size(r->loss) > 0) {
+				SKIPLIST_FOREACH(outofdate_nacklist, iter) {
+					skiplist_remove(r->loss, iter->key);
+				}
+			}
+			skiplist_destroy(outofdate_nacklist);
+		}
+
+		if (ack.nack_num) {
+			std::ostringstream os;
+			os <<(sequence_based? "sequence_based":"time_based");
+			os << "nack num=" <<  (int)ack.nack_num << " [";
+			for (uint8_t i = 0; i < ack.nack_num; ++i) {
+				os << ack.base_packet_id + ack.nack[i] << ",";
+			}
+			os << "]";
+			sim_debug("video_real_ack, %s \n", os.str().c_str());
+		}
 		
 		sim_receiver_send_ack(s, r, &ack);
 	
 		r->ack_ts = cur_ts;
-
+#ifndef USE_JITTER_ESTMITOR
 		/*calculate jitter*/
 		if (max_count >= 1) {
-			delay = (max_count + 7) * (s->rtt + s->rtt_var) >> 3;
+			delay = (max_count + 7) * s->stats->avg_rtt_ms() >> 3;
 		} else {
-			delay = SU_MAX(kMaxJitterDelayNoLost, (s->rtt + s->rtt_var) >> 2);
+			delay = SU_MAX(kMaxJitterDelayNoLost, s->stats->avg_rtt_ms()>> 2);
 		}
+
 		r->cache->wait_timer = (r->cache->wait_timer * 7 + delay) >> 3;
 		r->cache->wait_timer = SU_MAX(r->cache->frame_timer, r->cache->wait_timer);
-
-		/*for (i = 0; i < evict_count; i++){
-			key.u32 = numbers[i];
-			skiplist_remove(r->loss, key);
-			real_video_cache_discard(s, r->cache, key.u32);
-		}*/
+#endif
 	}
 }
 
@@ -684,7 +786,7 @@ static int sim_receiver_internal_put(sim_session_t* s, sim_receiver_t* r, sim_se
 		r->max_ts = seg->timestamp;
 	}
 
-	sim_receiver_update_loss(s, r, seq, seg->timestamp);
+	sim_receiver_update_loss(s, r, seg);
 	if (real_video_cache_put(s, r->cache, seg) != 0)
 		return -1;
 
@@ -699,7 +801,7 @@ static int sim_receiver_internal_put(sim_session_t* s, sim_receiver_t* r, sim_se
 	return 0;
 }
 
-static void sim_receiver_recover(sim_session_t* s, sim_receiver_t* r, int64_t recv_ts)
+static void sim_receiver_recover(sim_session_t* s, sim_receiver_t* r)
 {
 	skiplist_iter_t* iter;
 	skiplist_t* recover_map;
@@ -712,7 +814,7 @@ static void sim_receiver_recover(sim_session_t* s, sim_receiver_t* r, int64_t re
 
 		in_seg = (sim_segment_t*)malloc(sizeof(sim_segment_t));
 		*in_seg = *seg;
-		in_seg->recv_ts = recv_ts;
+		//in_seg->recv_ts = recv_ts;
 
 		skiplist_remove(recover_map, iter->key);
 
@@ -742,7 +844,7 @@ sim_receiver_t* sim_receiver_create(sim_session_t* s, int transport_type)
 
 	r->recover = sim_fec_create(s);
 
-	r->jitter = new VCMJitterBuffer(s->clock);
+	r->jitter = new JitterWrapper();
 
 	return r;
 }
@@ -768,7 +870,6 @@ void sim_receiver_destroy(sim_session_t* s, sim_receiver_t* r)
 	}
 
 	if (r->jitter) {
-		r->jitter->Stop();
 		delete r->jitter;
 	}
 
@@ -790,10 +891,6 @@ void sim_receiver_reset(sim_session_t* s, sim_receiver_t* r, int transport_type)
 	r->loss_count = 0;
 	r->fir_state = fir_normal;
 	r->fir_seq = 0;
-
-	if (r->jitter) {
-		r->jitter->Flush();
-	}
 
 	if (r->recover != NULL)
 		sim_fec_reset(s, r->recover);
@@ -829,8 +926,7 @@ int sim_receiver_active(sim_session_t* s, sim_receiver_t* r, uint32_t uid)
 		sim_fec_active(s, r->recover);
 
 	if (r->jitter) {
-		r->jitter->Start();
-		r->jitter->SetNackMode(VCMJitterBuffer::kNack, kLowRttNackMs, kHighRttNackMs);
+		r->jitter->SetNackMode(JitterWrapper::kProtectionNackFEC);
 	}
 
 	return 0;
@@ -850,7 +946,7 @@ int sim_receiver_put(sim_session_t* s, sim_receiver_t* r, sim_segment_t* seg)
 	//FEC recover
 	if (r->recover != NULL && seg->fec_id > 0){
 		sim_fec_put_segment(s, r->recover, seg);
-		sim_receiver_recover(s, r, seg->recv_ts);
+		sim_receiver_recover(s, r);
 	}
 
 	video_real_ack(s, r, 0, seg->packet_id);
@@ -865,7 +961,7 @@ int sim_receiver_put_fec(sim_session_t* s, sim_receiver_t* r, sim_fec_t* fec)
 
 	if (r->recover != NULL){
 		sim_fec_put_fec_packet(s, r->recover, fec);
-		sim_receiver_recover(s, r, fec->recv_ts);
+		sim_receiver_recover(s, r);
 	}
 
 	return 0;
@@ -892,17 +988,18 @@ void sim_receiver_timer(sim_session_t* s, sim_receiver_t* r, int64_t now_ts)
 {
 	video_real_ack(s, r, 1, 0);
 
-	/*Attempt to reduce the buffering wait time by shrinking it once per second.*/
-	if (r->cache_ts + SU_MAX(s->rtt + s->rtt_var, 500) < now_ts){
+#ifndef USE_JITTER_ESTMITOR
+	/*Attempt to reduce the buffering wait time by shrinking it.*/
+	if (r->cache_ts + SU_MAX(s->stats->avg_rtt_ms(), 500) < now_ts){
 		if (r->loss_count == 0)  // no packet lost reduce jitter, TODO (exclude fec case)
-			r->cache->wait_timer = SU_MAX(r->cache->wait_timer * 7 / 8, (s->rtt + s->rtt_var) / 2);
-		else if (r->cache->wait_timer > 2 * (s->rtt + s->rtt_var))
-			r->cache->wait_timer = SU_MAX(r->cache->wait_timer * 15 / 16, (s->rtt + s->rtt_var));
+			r->cache->wait_timer = SU_MAX(r->cache->wait_timer * 7 >> 3, s->stats->avg_rtt_ms() >> 1);
+		else if (r->cache->wait_timer > 2 * s->stats->avg_rtt_ms())
+			r->cache->wait_timer = SU_MAX(r->cache->wait_timer * 15 / 16, s->stats->avg_rtt_ms());
 
 		r->cache_ts = now_ts;
 		r->loss_count = 0;
 	}
-
+#endif
 	/*cc heart beat*/
 	if (r->cc != NULL)
 		r->cc->heartbeat(r->cc);
@@ -914,11 +1011,7 @@ void sim_receiver_timer(sim_session_t* s, sim_receiver_t* r, int64_t now_ts)
 void sim_receiver_update_rtt(sim_session_t* s, sim_receiver_t* r)
 {
 	if (r->cc != NULL)
-		r->cc->update_rtt(r->cc, s->rtt + s->rtt_var);
-
-	if (r->jitter->Running()) {
-		r->jitter->UpdateRtt(s->stats->max_rtt_ms());
-	}
+		r->cc->update_rtt(r->cc, s->stats->avg_rtt_ms());
 }
 
 uint32_t sim_receiver_cache_delay(sim_session_t* s, sim_receiver_t* r)

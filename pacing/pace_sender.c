@@ -128,8 +128,7 @@ void pace_try_transmit(pace_sender_t* pace, int64_t now_ts)
 	if (pacer_queue_bytes(&pace->que) > 0){
 		target_bitrate_kbps = pacer_queue_target_bitrate_kbps(&pace->que, now_ts);
 		target_bitrate_kbps = SU_MAX(pace->pacing_bitrate_kpbs, target_bitrate_kbps);
-	}
-	else
+	} else
 		target_bitrate_kbps = pace->pacing_bitrate_kpbs;
 
 	set_target_rate_kbps(&pace->media_budget, target_bitrate_kbps);
@@ -146,8 +145,7 @@ void pace_try_transmit(pace_sender_t* pace, int64_t now_ts)
 			
 			sent_bytes += ev->size;
 			pacer_queue_sent(&pace->que, ev);
-		}
-		else
+		} else
 			break;
 	}
 

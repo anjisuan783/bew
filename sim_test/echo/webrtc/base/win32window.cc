@@ -63,7 +63,7 @@ bool Win32Window::Create(HWND parent, const wchar_t* title, DWORD style,
 }
 
 void Win32Window::Destroy() {
-  const bool success = ::DestroyWindow(wnd_);
+  const BOOL success = ::DestroyWindow(wnd_);
   RTC_DCHECK(success);
 }
 

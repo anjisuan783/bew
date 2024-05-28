@@ -182,7 +182,6 @@ void sender_cc_set_bitrates(sender_cc_t* cc, uint32_t min_bitrate, uint32_t star
 	pace_set_bitrate_limits(cc->pacer, min_bitrate);
 	pace_set_estimate_bitrate(cc->pacer, start_bitrate);
 
-
 	razor_info("set razor sender bitrates, min = %ubps, max = %ubps, start = %ubps\n", min_bitrate, max_bitrate, start_bitrate);
 }
 

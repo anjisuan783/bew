@@ -77,24 +77,23 @@ typedef sim_connect_ack_t sim_disconnect_ack_t;
 
 typedef struct
 {
-	uint32_t	packet_id;		  /* sequence id exclude fec packets */
+	uint32_t	packet_id;		  /* sequence id excluding fec packets */
 	uint32_t	fid;					  /* frame id, start from 1 */
 	uint32_t	timestamp;			/* the time when split segments, value = now - sender->first_ts */
-	uint16_t	index;					/* segment id of one frame, start from 0 */
+	uint16_t	index;					/* segment id within one frame, start from 0 */
 	uint16_t	total;					/* total splited packets of one frame */
 	uint8_t		ftype;					/* frame type, 1 for key, 0 for delta */
 	uint8_t		payload_type;		
 
 	uint8_t		remb;					  /* use remb */
 	uint16_t	fec_id;					/* fec object id, flex_fec_sender_t.fec_id */
-	uint16_t	send_ts;				/* the time when sending the seg, d-value relevant to seg->timestamp */
+	uint16_t	send_ts;				/* the time when sending the seg, d-value relevant to seg->timestamp, also update by resend*/
 	uint16_t	transport_seq;	/* sequence */
 	
 	uint32_t	send_id;        /* sequence id include fec packets */
 
 	uint16_t	data_size;      /* segment meta length */
 	uint8_t		data[SIM_VIDEO_SIZE]; /* segment meta data */
-	uint64_t  recv_ts;
 }sim_segment_t;
 
 #define SIM_SEGMENT_HEADER_SIZE (SIM_HEADER_SIZE + 24)

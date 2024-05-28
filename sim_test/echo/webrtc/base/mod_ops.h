@@ -16,6 +16,9 @@
 
 #include "webrtc/base/checks.h"
 
+#undef min
+#undef max
+
 namespace webrtc {
 
 template <unsigned long M>                                    // NOLINT

@@ -40,8 +40,6 @@ struct __sim_session
 
 	uint32_t		uid;				/*user ID*/
 
-	uint32_t		rtt;
-	uint32_t		rtt_var;			/*smooth rtt*/
 	CallStats*      stats;
 
 	uint8_t			loss_fraction;		/* 0 ~ 255  100% = 255*/
@@ -74,7 +72,8 @@ struct __sim_session
 	uint64_t		video_bytes;
 	uint32_t		max_frame_size;		/*max frames in within a period*/
 
-	uint64_t  fec_bytes;
+	uint64_t  fec_bitrate;
+	uint64_t  nack_bitrate;
 
 	int				min_bitrate;		/*target min bitrate, unit: bps*/
 	int				max_bitrate;		/*target max bitrate, unit: bps*/
@@ -87,8 +86,6 @@ struct __sim_session
 
 	bin_stream_t	sstrm;
 	ExpFilter* exp_filter;
-
-	Clock* clock;
 };
 
 #define MIN_BITRATE		80000					/*80kbps*/

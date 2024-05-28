@@ -26,7 +26,6 @@ typedef struct
 
 	interval_budget_t	media_budget;
 
-	
 	void*				handler;       // sender object
 	pace_send_func		send_cb; /*sender call function*/
 }pace_sender_t;

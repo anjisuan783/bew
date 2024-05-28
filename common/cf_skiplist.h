@@ -56,32 +56,31 @@ typedef struct
 }skiplist_t;
 
 
-skiplist_t*				skiplist_create(skiplist_compare_f compare_cb, skiplist_free_f free_cb, void* args);
-void					skiplist_destroy(skiplist_t* sl);
+skiplist_t* skiplist_create(skiplist_compare_f compare_cb, skiplist_free_f free_cb, void* args);
+void skiplist_destroy(skiplist_t* sl);
 
-void					skiplist_clear(skiplist_t* sl);
-size_t					skiplist_size(skiplist_t* sl);
+void skiplist_clear(skiplist_t* sl);
+size_t skiplist_size(skiplist_t* sl);
 
-void					skiplist_insert(skiplist_t* sl, skiplist_item_t key, skiplist_item_t val);
-skiplist_iter_t*		skiplist_remove(skiplist_t* sl, skiplist_item_t key);
+void skiplist_insert(skiplist_t* sl, skiplist_item_t key, skiplist_item_t val);
+skiplist_iter_t* skiplist_remove(skiplist_t* sl, skiplist_item_t key);
 
-skiplist_iter_t*		skiplist_search(skiplist_t* sl, skiplist_item_t key);
-skiplist_iter_t*		skiplist_first(skiplist_t* sl);
+skiplist_iter_t* skiplist_search(skiplist_t* sl, skiplist_item_t key);
+skiplist_iter_t* skiplist_first(skiplist_t* sl);
 
 /*traverse skiplist*/
 #define SKIPLIST_FOREACH(sl, iter)	\
 	for(iter = sl->entries[0]; iter != NULL; iter = iter->next[0])
 
 
-int						id8_compare(skiplist_item_t k1, skiplist_item_t k2);
-int						id16_compare(skiplist_item_t k1, skiplist_item_t k2);
-int						id32_compare(skiplist_item_t k1, skiplist_item_t k2);
-int						id64_compare(skiplist_item_t k1, skiplist_item_t k2);
-
-int						idu8_compare(skiplist_item_t k1, skiplist_item_t k2);
-int						idu16_compare(skiplist_item_t k1, skiplist_item_t k2);
-int						idu32_compare(skiplist_item_t k1, skiplist_item_t k2);
-int						idu64_compare(skiplist_item_t k1, skiplist_item_t k2);
+int id8_compare(skiplist_item_t k1, skiplist_item_t k2);
+int id16_compare(skiplist_item_t k1, skiplist_item_t k2);
+int id32_compare(skiplist_item_t k1, skiplist_item_t k2);
+int id64_compare(skiplist_item_t k1, skiplist_item_t k2);
+int idu8_compare(skiplist_item_t k1, skiplist_item_t k2);
+int idu16_compare(skiplist_item_t k1, skiplist_item_t k2);
+int idu32_compare(skiplist_item_t k1, skiplist_item_t k2);
+int idu64_compare(skiplist_item_t k1, skiplist_item_t k2);
 
 #ifdef __cplusplus
 }

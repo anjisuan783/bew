@@ -14,7 +14,6 @@
 #include "sim_sender.h"
 #include "exp_filter.h"
 #include "call_stats.h"
-#include "clock.h"
 #include "jitter_buffer.h"
 
 
@@ -53,8 +52,6 @@ sim_session_t* sim_session_create(uint16_t port, void* event, sim_notify_fn noti
 	s->scid = rand();
 	s->rcid = 0;
 	s->uid = 0;
-	s->rtt = 50;
-	s->rtt_var = 5;
 	s->stats = new CallStats;
 
 	s->loss_fraction = 0;
@@ -88,7 +85,7 @@ sim_session_t* sim_session_create(uint16_t port, void* event, sim_notify_fn noti
 
 	s->exp_filter = new ExpFilter(kValueLossFraction, kValueLossFractionMax);
 
-	s->clock = Clock::GetRealTimeClock();
+	//s->clock = Clock::GetRealTimeClock();
 
 	s->run = 1;
 	s->thr = su_create_thread(NULL, sim_session_loop_event, s);
@@ -123,8 +120,8 @@ void sim_session_destroy(sim_session_t* s)
 	if (s->stats)
 		delete s->stats;
 
-	if (s->clock)
-		delete s->clock;
+	//if (s->clock)
+	//	delete s->clock;
 	
 	free(s);
 }
@@ -133,8 +130,6 @@ static void sim_session_reset(sim_session_t* s)
 {
 	s->uid = 0;
 	s->state = session_idle;
-	s->rtt = 50;
-	s->rtt_var = 5;
 	s->stats->reset();
 	s->loss_fraction = 0;
 	s->scid = rand();
@@ -145,7 +140,8 @@ static void sim_session_reset(sim_session_t* s)
 	s->scount = 0;
 	s->video_bytes = 0;
 	s->max_frame_size = 0;
-	s->fec_bytes = 0;
+	s->fec_bitrate = 0;
+	s->nack_bitrate = 0;
 
 	s->stat_ts = GET_SYS_MS();
 	s->resend = 0;
@@ -333,22 +329,8 @@ int sim_session_network_send(sim_session_t* s, bin_stream_t* strm)
 // keep_rtt is real rtt
 void sim_session_calculate_rtt(sim_session_t* s, uint32_t keep_rtt, int64_t now)
 {
-	//if (keep_rtt < 5)
-	//	keep_rtt = 5;
-
-	// s->rtt_var = 3/4 * s->rtt_var + 1/4 * |s->rtt - keep_rtt|;
-	s->rtt_var = (s->rtt_var * 3 + SU_ABS(s->rtt, keep_rtt)) >> 2;
-	//if (s->rtt_var < 10)
-	//	s->rtt_var = 10;
-
-	// s->rtt = 7/8 * s->rtt + 1/8*keep_rtt;
-	s->rtt = (7 * s->rtt + keep_rtt) >> 3;
-	//if (s->rtt < 10)
-	//	s->rtt = 10;
-
 	s->stats->OnRttUpdate(keep_rtt, now);
 
-	//sim_debug("sim_session_calculate_rtt rtt=%u rttvar=%u realrtt=%u\n", s->rtt, s->rtt_var, keep_rtt);
 	if (s->sender != NULL) {
 		sim_sender_update_rtt(s, s->sender);
 		s->sender->cc->update_rtt(s->sender->cc, keep_rtt);
@@ -733,7 +715,7 @@ static void sim_session_send_ping(sim_session_t* s, int64_t now_ts)
 	/*exceed 3s, don't send package*/
 	if (s->resend >= 4){
 		if (s->sender != NULL && s->sender->cc != NULL)
-			s->sender->cc->update_rtt(s->sender->cc, s->rtt + 20 * s->resend);
+			s->sender->cc->update_rtt(s->sender->cc, s->stats->avg_rtt_ms() + 20 * s->resend);
 	}
 
 	if (s->resend > 12){
@@ -762,34 +744,33 @@ static void sim_session_state_timer(sim_session_t* s, int64_t now_ts, sim_sessio
 		uint32_t cache_delay = 0;
 		uint32_t jitter_ts = 0;
 		uint32_t interval_ts = 0;
-		uint32_t e_jitter = 0;
 		if (s->receiver) {
 			cache_delay = sim_receiver_cache_delay(s, s->receiver);
 			jitter_ts = s->receiver->cache->wait_timer;
 			interval_ts = s->receiver->cache->frame_timer;
-			e_jitter = s->receiver->jitter->EstimatedJitterMs();
 		}
 
 		if (s->state_cb != NULL){
 			snprintf(info, SIM_INFO_SIZE,
-				"video rate=%ukb/s, send=%ukb/s, recv=%ukb/s, fec=%ukb/s, rtt=%d+%d, maxfsize=%uKB, pacer delay=%u, cache delay=%u interval=%u, jitter=%u, lost=%.2f, rtt_am=%lld-%lld, ejitter=%u",
+				"video=%ukb/s, s=%ukb/s, r=%ukb/s, f=%ukb/s, n=%ukb/s, maxfsize=%uKB, pacer=%u, cache=%u interval=%u, jitter=%u, lost=%.2f, rtt_am=%lld-%lld",
 					(uint32_t)(s->video_bytes * 1000 * 8 / delay), 
 					(uint32_t)(s->sbitrate * 1000 * 8 / delay), 
 					(uint32_t)(s->rbitrate * 1000 * 8 / delay), 
-					(uint32_t)(s->fec_bytes * 1000 * 8 / delay), 
-					s->rtt, s->rtt_var, (s->max_frame_size >> 10),
+					(uint32_t)(s->fec_bitrate * 1000 * 8 / delay), 
+					(uint32_t)(s->nack_bitrate * 1000 * 8 / delay), 
+					(s->max_frame_size >> 10),
 					pacer_ms, cache_delay, interval_ts, jitter_ts, s->exp_filter->filtered()*100,
-					s->stats->avg_rtt_ms(), s->stats->max_rtt_ms(), e_jitter);
+					s->stats->avg_rtt_ms(), s->stats->max_rtt_ms());
 			s->state_cb(s->event, info);
 		}
 
 		if (s->sender != NULL){
-			sim_info("sim transport, send count = %u, recv count = %u, send bandwidth = %ukb/s, recv bandwidth = %ukb/s, rtt = %d, video rate = %ukb/s, pacer delay = %ums, loss=%u\n",
+			sim_info("sim transport, scount=%u, rcount=%u, s=%ukb/s, r=%ukb/s, rtt=%lld-%lld, video=%ukb/s, pacer=%u, loss=%u\n",
 					(uint32_t)(s->scount), 
 					(uint32_t)(s->rcount), 
 					(uint32_t)(s->sbitrate * 1000 * 8 / delay),
 					(uint32_t)(s->rbitrate * 1000 * 8 / delay), 
-					s->rtt + s->rtt_var, 
+					s->stats->avg_rtt_ms(), s->stats->max_rtt_ms(),
 					(uint32_t)(s->video_bytes * 1000 * 8 / delay), 
 					pacer_ms, s->loss_fraction);
 		}
@@ -800,15 +781,16 @@ static void sim_session_state_timer(sim_session_t* s, int64_t now_ts, sim_sessio
 		s->rcount = 0;
 		s->video_bytes = 0;
 		s->max_frame_size = 0;
-		s->fec_bytes = 0;
+		s->fec_bitrate = 0;
+		s->nack_bitrate = 0;
 	}
 
 	if (s->commad_ts + tick_delay <= now_ts){
 		if (s->resend * tick_delay < 10000){
 			fn(s, now_ts);
 			if (s->resend == 2) {
-				s->rtt += 500;
-				sim_debug("sim_session_state_timer rtt=%u rttvar=%u\n", s->rtt, s->rtt_var);
+				s->stats->OnRttUpdate(s->stats->avg_rtt_ms() + 500, now_ts);
+				sim_debug("sim_session_state_timer rtt=%u\n", s->stats->avg_rtt_ms());
 			}
 		} else {
 			if (s->receiver != NULL){

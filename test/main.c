@@ -18,13 +18,13 @@ int main(int argc, const char* argv[])
 	/*test_sender_history();*/
 	/*test_ack_bitrate_estimator();*/
 	/*test_delay_base_bwe();*/
-	/*test_interval_budget();*/
-	/*test_pacer_queue();*/
-	/*test_pace();*/
+	test_interval_budget();
+	test_pacer_queue();
+	test_pace();
 	
 	/*test_rate_stat();*/
 	/*test_rbe();*/
-	test_loss_stat();
+	//test_loss_stat();
 	/*test_windowed_filter();*/
 	/*test_bbr_transfer_tracker();*/
 	/*test_bandwidth_sampler();*/

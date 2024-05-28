@@ -6,8 +6,8 @@
 #include <string>
 #include <algorithm>
 
-#include "clock.h"
 #include "session_log.h"
+#include "cf_platform.h"
 
 // Use this rtt if no value has been reported.
 static const int64_t kDefaultRtt = 200;
@@ -160,199 +160,6 @@ class RollingAccumulator {
   std::vector<T> samples_;
 };
 
-///////////////////////////////////////////////////////
-// VCMRttFilter
-class VCMRttFilter {
- public:
-  VCMRttFilter();
-
-  VCMRttFilter& operator=(const VCMRttFilter& rhs);
-
-  // Resets the filter.
-  void Reset();
-  // Updates the filter with a new sample.
-  void Update(int64_t rttMs);
-  // A getter function for the current RTT level in ms.
-  int64_t RttMs() const;
-
- private:
-  // The size of the drift and jump memory buffers
-  // and thus also the detection threshold for these
-  // detectors in number of samples.
-  enum { kMaxDriftJumpCount = 5 };
-  // Detects RTT jumps by comparing the difference between
-  // samples and average to the standard deviation.
-  // Returns true if the long time statistics should be updated
-  // and false otherwise
-  bool JumpDetection(int64_t rttMs);
-  // Detects RTT drifts by comparing the difference between
-  // max and average to the standard deviation.
-  // Returns true if the long time statistics should be updated
-  // and false otherwise
-  bool DriftDetection(int64_t rttMs);
-  // Computes the short time average and maximum of the vector buf.
-  void ShortRttFilter(int64_t* buf, uint32_t length);
-
-  bool _gotNonZeroUpdate;
-  double _avgRtt;
-  double _varRtt;
-  int64_t _maxRtt;
-  uint32_t _filtFactCount;
-  const uint32_t _filtFactMax;
-  const double _jumpStdDevs;
-  const double _driftStdDevs;
-  int32_t _jumpCount;
-  int32_t _driftCount;
-  const int32_t _detectThreshold;
-  int64_t _jumpBuf[kMaxDriftJumpCount];
-  int64_t _driftBuf[kMaxDriftJumpCount];
-};
-
-VCMRttFilter::VCMRttFilter()
-    : _filtFactMax(35),
-      _jumpStdDevs(2.5),
-      _driftStdDevs(3.5),
-      _detectThreshold(kMaxDriftJumpCount) {
-  Reset();
-}
-
-VCMRttFilter& VCMRttFilter::operator=(const VCMRttFilter& rhs) {
-  if (this != &rhs) {
-    _gotNonZeroUpdate = rhs._gotNonZeroUpdate;
-    _avgRtt = rhs._avgRtt;
-    _varRtt = rhs._varRtt;
-    _maxRtt = rhs._maxRtt;
-    _filtFactCount = rhs._filtFactCount;
-    _jumpCount = rhs._jumpCount;
-    _driftCount = rhs._driftCount;
-    memcpy(_jumpBuf, rhs._jumpBuf, sizeof(_jumpBuf));
-    memcpy(_driftBuf, rhs._driftBuf, sizeof(_driftBuf));
-  }
-  return *this;
-}
-
-void VCMRttFilter::Reset() {
-  _gotNonZeroUpdate = false;
-  _avgRtt = 0;
-  _varRtt = 0;
-  _maxRtt = 0;
-  _filtFactCount = 1;
-  _jumpCount = 0;
-  _driftCount = 0;
-  memset(_jumpBuf, 0, kMaxDriftJumpCount);
-  memset(_driftBuf, 0, kMaxDriftJumpCount);
-}
-
-void VCMRttFilter::Update(int64_t rttMs) {
-  if (!_gotNonZeroUpdate) {
-    if (rttMs == 0) {
-      return;
-    }
-    _gotNonZeroUpdate = true;
-  }
-
-  // Sanity check
-  if (rttMs > 3000) {
-    rttMs = 3000;
-  }
-
-  double filtFactor = 0;
-  if (_filtFactCount > 1) {
-    filtFactor = static_cast<double>(_filtFactCount - 1) / _filtFactCount;
-  }
-  _filtFactCount++;
-  if (_filtFactCount > _filtFactMax) {
-    // This prevents filtFactor from going above
-    // (_filtFactMax - 1) / _filtFactMax,
-    // e.g., _filtFactMax = 50 => filtFactor = 49/50 = 0.98
-    _filtFactCount = _filtFactMax;
-  }
-  double oldAvg = _avgRtt;
-  double oldVar = _varRtt;
-  _avgRtt = filtFactor * _avgRtt + (1 - filtFactor) * rttMs;
-  _varRtt = filtFactor * _varRtt +
-            (1 - filtFactor) * (rttMs - _avgRtt) * (rttMs - _avgRtt);
-  _maxRtt = std::max<int64_t>(rttMs, _maxRtt);
-  if (!JumpDetection(rttMs) || !DriftDetection(rttMs)) {
-    // In some cases we don't want to update the statistics
-    _avgRtt = oldAvg;
-    _varRtt = oldVar;
-  }
-}
-
-bool VCMRttFilter::JumpDetection(int64_t rttMs) {
-  double diffFromAvg = _avgRtt - rttMs;
-  if (fabs(diffFromAvg) > _jumpStdDevs * sqrt(_varRtt)) {
-    int diffSign = (diffFromAvg >= 0) ? 1 : -1;
-    int jumpCountSign = (_jumpCount >= 0) ? 1 : -1;
-    if (diffSign != jumpCountSign) {
-      // Since the signs differ the samples currently
-      // in the buffer is useless as they represent a
-      // jump in a different direction.
-      _jumpCount = 0;
-    }
-    if (abs(_jumpCount) < kMaxDriftJumpCount) {
-      // Update the buffer used for the short time
-      // statistics.
-      // The sign of the diff is used for updating the counter since
-      // we want to use the same buffer for keeping track of when
-      // the RTT jumps down and up.
-      _jumpBuf[abs(_jumpCount)] = rttMs;
-      _jumpCount += diffSign;
-    }
-    if (abs(_jumpCount) >= _detectThreshold) {
-      // Detected an RTT jump
-      ShortRttFilter(_jumpBuf, abs(_jumpCount));
-      _filtFactCount = _detectThreshold + 1;
-      _jumpCount = 0;
-    } else {
-      return false;
-    }
-  } else {
-    _jumpCount = 0;
-  }
-  return true;
-}
-
-bool VCMRttFilter::DriftDetection(int64_t rttMs) {
-  if (_maxRtt - _avgRtt > _driftStdDevs * sqrt(_varRtt)) {
-    if (_driftCount < kMaxDriftJumpCount) {
-      // Update the buffer used for the short time
-      // statistics.
-      _driftBuf[_driftCount] = rttMs;
-      _driftCount++;
-    }
-    if (_driftCount >= _detectThreshold) {
-      // Detected an RTT drift
-      ShortRttFilter(_driftBuf, _driftCount);
-      _filtFactCount = _detectThreshold + 1;
-      _driftCount = 0;
-    }
-  } else {
-    _driftCount = 0;
-  }
-  return true;
-}
-
-void VCMRttFilter::ShortRttFilter(int64_t* buf, uint32_t length) {
-  if (length == 0) {
-    return;
-  }
-  _maxRtt = 0;
-  _avgRtt = 0;
-  for (uint32_t i = 0; i < length; i++) {
-    if (buf[i] > _maxRtt) {
-      _maxRtt = buf[i];
-    }
-    _avgRtt += buf[i];
-  }
-  _avgRtt = _avgRtt / static_cast<double>(length);
-}
-
-int64_t VCMRttFilter::RttMs() const {
-  return static_cast<int64_t>(_maxRtt + 0.5);
-}
-
 //////////////////////////////////////////////////////////
 // VCMInterFrameDelay
 class VCMInterFrameDelay {
@@ -376,13 +183,6 @@ class VCMInterFrameDelay {
   bool CalculateDelay(uint32_t timestamp,
                       int64_t* delay,
                       int64_t currentWallClock);
-
-  // Returns the current difference between incoming timestamps
-  //
-  // Return value                 : Wrap-around compensated difference between
-  // incoming
-  //                                timestamps.
-  uint32_t CurrentTimeStampDiffMs() const;
 
  private:
   // Controls if the RTP timestamp counter has had a wrap around
@@ -447,8 +247,10 @@ bool VCMInterFrameDelay::CalculateDelay(uint32_t timestamp,
   // Compute the compensated timestamp difference and convert it to ms and
   // round it to closest integer.
   _dTS = static_cast<int64_t>(
-      (timestamp + wrapAroundsSincePrev * (static_cast<int64_t>(1) << 32) - _prevTimestamp) / 90.0 
-      + 0.5);
+      (timestamp + wrapAroundsSincePrev * (static_cast<int64_t>(1) << 32) -
+       _prevTimestamp) /
+          90.0 +
+      0.5);
 
   // frameDelay is the difference of dT and dTS -- i.e. the difference of
   // the wall clock time difference and the timestamp difference between
@@ -459,14 +261,6 @@ bool VCMInterFrameDelay::CalculateDelay(uint32_t timestamp,
   _prevWallClock = currentWallClock;
 
   return true;
-}
-
-// Returns the current difference between incoming timestamps
-uint32_t VCMInterFrameDelay::CurrentTimeStampDiffMs() const {
-  if (_dTS < 0) {
-    return 0;
-  }
-  return static_cast<uint32_t>(_dTS);
 }
 
 // Investigates if the timestamp clock has overflowed since the last timestamp
@@ -496,16 +290,9 @@ void VCMInterFrameDelay::CheckForWrapArounds(uint32_t timestamp) {
 // VCMJitterEstimator
 class VCMJitterEstimator {
  public:
-  VCMJitterEstimator(const Clock* clock,
-                     int32_t vcmId = 0,
-                     int32_t receiverId = 0);
+  VCMJitterEstimator();
   virtual ~VCMJitterEstimator();
-  VCMJitterEstimator& operator=(const VCMJitterEstimator& rhs);
-
-  // Resets the estimate to the initial state
-  void Reset();
-  void ResetNackCount();
-
+  
   // Updates the jitter estimate with the new data.
   //
   // Input:
@@ -527,17 +314,6 @@ class VCMJitterEstimator {
   // Return value                   : Jitter estimate in milliseconds
   virtual int GetJitterEstimate(double rttMultiplier);
 
-  // Updates the nack counter.
-  void FrameNacked();
-
-  // Updates the RTT filter.
-  //
-  // Input:
-  //          - rttMs               : RTT in ms
-  void UpdateRtt(int64_t rttMs);
-
-  void UpdateMaxFrameSize(uint32_t frameSizeBytes);
-
   // A constant describing the delay from the jitter buffer
   // to the delay on the receiving side which is not accounted
   // for by the jitter buffer nor the decoding delay estimate.
@@ -551,6 +327,8 @@ class VCMJitterEstimator {
   virtual bool LowRateExperimentEnabled();
 
  private:
+  // Resets the estimate to the initial state
+  void Reset();
   // Updates the Kalman filter for the line describing
   // the frame size dependent jitter.
   //
@@ -598,13 +376,10 @@ class VCMJitterEstimator {
   double GetFrameRate() const;
 
   // Constants, filter parameters
-  int32_t _vcmId;
-  int32_t _receiverId;
   const double _phi;
   const double _psi;
   const uint32_t _alphaCountMax;
   const double _thetaLow;
-  const uint32_t _nackLimit;
   const int32_t _numStdDevDelayOutlier;
   const int32_t _numStdDevFrameSizeOutlier;
   const double _noiseStdDevs;
@@ -628,73 +403,37 @@ class VCMJitterEstimator {
 
   uint32_t _startupCount;
 
-  int64_t
-      _latestNackTimestamp;  // Timestamp in ms when the latest nack was seen
-  uint32_t _nackCount;       // Keeps track of the number of nacks received,
-                             // but never goes above _nackLimit
-  VCMRttFilter _rttFilter;
+  //VCMRttFilter _rttFilter;
 
   RollingAccumulator<uint64_t> fps_counter_;
   enum ExperimentFlag { kInit, kEnabled, kDisabled };
   ExperimentFlag low_rate_experiment_;
-  const Clock* clock_;
+  
+  VCMJitterEstimator& operator=(const VCMJitterEstimator& rhs);
 };
 
 enum { kStartupDelaySamples = 30 };
 enum { kFsAccuStartupSamples = 5 };
 enum { kMaxFramerateEstimate = 200 };
 
-VCMJitterEstimator::VCMJitterEstimator(const Clock* clock,
-                                       int32_t vcmId,
-                                       int32_t receiverId)
-    : _vcmId(vcmId),
-      _receiverId(receiverId),
-      _phi(0.97),
+VCMJitterEstimator::VCMJitterEstimator()
+    : _phi(0.97),
       _psi(0.9999),
       _alphaCountMax(400),
       _thetaLow(0.000001),
-      _nackLimit(3),
       _numStdDevDelayOutlier(15),
       _numStdDevFrameSizeOutlier(3),
       _noiseStdDevs(2.33),       // ~Less than 1% chance
                                  // (look up in normal distribution table)...
       _noiseStdDevOffset(30.0),  // ...of getting 30 ms freezes
-      _rttFilter(),
+      //_rttFilter(),
       fps_counter_(30),  // TODO(sprang): Use an estimator with limit based on
                          // time, rather than number of samples.
-      low_rate_experiment_(kInit),
-      clock_(clock) {
+      low_rate_experiment_(kInit) {
   Reset();
 }
 
 VCMJitterEstimator::~VCMJitterEstimator() {}
-
-VCMJitterEstimator& VCMJitterEstimator::operator=(
-    const VCMJitterEstimator& rhs) {
-  if (this != &rhs) {
-    memcpy(_thetaCov, rhs._thetaCov, sizeof(_thetaCov));
-    memcpy(_Qcov, rhs._Qcov, sizeof(_Qcov));
-
-    _vcmId = rhs._vcmId;
-    _receiverId = rhs._receiverId;
-    _avgFrameSize = rhs._avgFrameSize;
-    _varFrameSize = rhs._varFrameSize;
-    _maxFrameSize = rhs._maxFrameSize;
-    _fsSum = rhs._fsSum;
-    _fsCount = rhs._fsCount;
-    _lastUpdateT = rhs._lastUpdateT;
-    _prevEstimate = rhs._prevEstimate;
-    _prevFrameSize = rhs._prevFrameSize;
-    _avgNoise = rhs._avgNoise;
-    _alphaCount = rhs._alphaCount;
-    _filterJitterEstimate = rhs._filterJitterEstimate;
-    _startupCount = rhs._startupCount;
-    _latestNackTimestamp = rhs._latestNackTimestamp;
-    _nackCount = rhs._nackCount;
-    _rttFilter = rhs._rttFilter;
-  }
-  return *this;
-}
 
 // Resets the JitterEstimate
 void VCMJitterEstimator::Reset() {
@@ -717,17 +456,11 @@ void VCMJitterEstimator::Reset() {
   _avgNoise = 0.0;
   _alphaCount = 1;
   _filterJitterEstimate = 0.0;
-  _latestNackTimestamp = 0;
-  _nackCount = 0;
   _fsSum = 0;
   _fsCount = 0;
   _startupCount = 0;
-  _rttFilter.Reset();
+  //_rttFilter.Reset();
   fps_counter_.Reset();
-}
-
-void VCMJitterEstimator::ResetNackCount() {
-  _nackCount = 0;
 }
 
 // Updates the estimates with the new measurements
@@ -738,6 +471,9 @@ void VCMJitterEstimator::UpdateEstimate(int64_t frameDelayMS,
     return;
   }
   int deltaFS = frameSizeBytes - _prevFrameSize;
+
+  sim_debug("UpdateEstimate frame_delay=%lld deltaFS=%d \n", frameDelayMS, deltaFS);
+
   // calculate first 5 frames for getting the _avgFrameSize quickly
   if (_fsCount < kFsAccuStartupSamples) {
     _fsSum += frameSizeBytes;
@@ -751,9 +487,9 @@ void VCMJitterEstimator::UpdateEstimate(int64_t frameDelayMS,
     double avgFrameSize = _phi * _avgFrameSize + (1 - _phi) * frameSizeBytes;
     // 68-95-99.7
     if (frameSizeBytes < _avgFrameSize + 2 * sqrt(_varFrameSize)) {
-      // Only update the average frame size if this sample wasn't a
-      // key frame
+      // Only update the average frame size if this sample wasn't a key frame
       _avgFrameSize = avgFrameSize;
+      sim_debug("UpdateEstimate _avgFrameSize=%lf frameSizeBytes=%u \n", _avgFrameSize, frameSizeBytes);
     }
     // Update the variance anyway since we want to capture cases where we only
     // get key frames.
@@ -802,19 +538,6 @@ void VCMJitterEstimator::UpdateEstimate(int64_t frameDelayMS,
     PostProcessEstimate();
   } else {
     _startupCount++;
-  }
-}
-
-// Updates the nack/packet ratio
-void VCMJitterEstimator::FrameNacked() {
-  // Wait until _nackLimit retransmissions has been received,
-  // then always add ~1 RTT delay.
-  // TODO(holmer): Should we ever remove the additional delay if the
-  // the packet losses seem to have stopped? We could for instance scale
-  // the number of RTTs to add with the amount of retransmissions in a given
-  // time interval, or similar.
-  if (_nackCount < _nackLimit) {
-    _nackCount++;
   }
 }
 
@@ -907,7 +630,7 @@ double VCMJitterEstimator::DeviationFromExpectedDelay(
 // sample distance from the line given by theta.
 void VCMJitterEstimator::EstimateRandomJitter(double d_dT,
                                               bool incompleteFrame) {
-  uint64_t now = clock_->TimeInMicroseconds();
+  uint64_t now = GET_SYS_MS() * 1000;
   if (_lastUpdateT != -1) {
     fps_counter_.AddSample(now - _lastUpdateT);
   }
@@ -985,24 +708,12 @@ void VCMJitterEstimator::PostProcessEstimate() {
   _filterJitterEstimate = CalculateEstimate();
 }
 
-void VCMJitterEstimator::UpdateRtt(int64_t rttMs) {
-  _rttFilter.Update(rttMs);
-}
-
-void VCMJitterEstimator::UpdateMaxFrameSize(uint32_t frameSizeBytes) {
-  if (_maxFrameSize < frameSizeBytes) {
-    _maxFrameSize = frameSizeBytes;
-  }
-}
-
 // Returns the current filtered estimate if available,
 // otherwise tries to calculate an estimate.
-int VCMJitterEstimator::GetJitterEstimate(double rttMultiplier) {
+int VCMJitterEstimator::GetJitterEstimate(double /*rttMultiplier*/) {
   double jitterMS = CalculateEstimate() + OPERATING_SYSTEM_JITTER;
   if (_filterJitterEstimate > jitterMS)
     jitterMS = _filterJitterEstimate;
-  if (_nackCount >= _nackLimit)
-    jitterMS += _rttFilter.RttMs() * rttMultiplier;
 
   if (LowRateExperimentEnabled()) {
     static const double kJitterScaleLowThreshold = 5.0;
@@ -1055,108 +766,37 @@ double VCMJitterEstimator::GetFrameRate() const {
 
 ///////////////////////////////////////////////////////
 // VCMJitterBuffer
-VCMJitterBuffer::VCMJitterBuffer(Clock* clock)
-  : clock_(clock),
-    jitter_estimate_(new VCMJitterEstimator(clock)),
-    inter_frame_delay_(new VCMInterFrameDelay(clock_->TimeInMilliseconds())) {
+JitterWrapper::JitterWrapper()
+  : jitter_estimate_(new VCMJitterEstimator),
+    inter_frame_delay_(new VCMInterFrameDelay(GET_SYS_MS())) {
 }
 
-VCMJitterBuffer::~VCMJitterBuffer() {
-
+JitterWrapper::~JitterWrapper() {
+  delete jitter_estimate_;
+  delete inter_frame_delay_;
 }
 
-void VCMJitterBuffer::Start() {
-  running_ = true;
-  rtt_ms_ = kDefaultRtt;
+void JitterWrapper::SetNackMode(VCMVideoProtection mode) {
+  protection_mode_ = mode;
 }
 
-void VCMJitterBuffer::Stop() {
-  running_ = false;
-}
-
-bool VCMJitterBuffer::Running() const {
-  return running_;
-}
-
-void VCMJitterBuffer::Flush() {
-  jitter_estimate_->Reset();
-  inter_frame_delay_->Reset(clock_->TimeInMilliseconds());
-  //missing_sequence_numbers_.clear();
-}
-
-void VCMJitterBuffer::SetNackMode(VCMNackMode mode,
-                                  int64_t low_rtt_nack_threshold_ms,
-                                  int64_t high_rtt_nack_threshold_ms) {
-  nack_mode_ = mode;
-  if (mode == kNoNack) {
-    //missing_sequence_numbers_.clear();
-  }
-  assert(low_rtt_nack_threshold_ms >= -1 && high_rtt_nack_threshold_ms >= -1);
-  assert(high_rtt_nack_threshold_ms == -1 ||
-         low_rtt_nack_threshold_ms <= high_rtt_nack_threshold_ms);
-  assert(low_rtt_nack_threshold_ms > -1 || high_rtt_nack_threshold_ms == -1);
-  low_rtt_nack_threshold_ms_ = low_rtt_nack_threshold_ms;
-  high_rtt_nack_threshold_ms_ = high_rtt_nack_threshold_ms;
-  // Don't set a high start rtt if high_rtt_nack_threshold_ms_ is used, to not
-  // disable NACK in |kNack| mode.
-  if (rtt_ms_ == kDefaultRtt && high_rtt_nack_threshold_ms_ != -1) {
-    rtt_ms_ = 0;
-  }
-  if (!WaitForRetransmissions()) {
-    jitter_estimate_->ResetNackCount();
-  }
-}
-
-uint32_t VCMJitterBuffer::EstimatedJitterMs() {
-  // Compute RTT multiplier for estimation.
-  // low_rtt_nackThresholdMs_ == -1 means no FEC.
-  double rtt_mult = 1.0f;
-  if (low_rtt_nack_threshold_ms_ >= 0 &&
-      rtt_ms_ >= low_rtt_nack_threshold_ms_) {
-    // For RTTs above low_rtt_nack_threshold_ms_ we don't apply extra delay
-    // when waiting for retransmissions.
-    rtt_mult = 0.0f;
-  }
+uint32_t JitterWrapper::EstimatedJitterMs() {
+  float rtt_mult = protection_mode_ == kProtectionNackFEC ? 0.0 : 1.0;
   return jitter_estimate_->GetJitterEstimate(rtt_mult);
-}
-
-void VCMJitterBuffer::UpdateRtt(int64_t rtt_ms) {
-  rtt_ms_ = rtt_ms;
-  jitter_estimate_->UpdateRtt(rtt_ms);
-  if (!WaitForRetransmissions())
-    jitter_estimate_->ResetNackCount();
 }
 
 // Should never be called with retransmitted frames, 
 // they must be filtered out before this function is called.
-void VCMJitterBuffer::UpdateJitterEstimate(int64_t latest_packet_time_ms,
-                                           uint32_t timestamp,
-                                           unsigned int frame_size,
-                                           bool incomplete_frame) {
+void JitterWrapper::UpdateJitterEstimate(int64_t latest_packet_time_ms,
+                                         uint32_t timestamp,
+                                         unsigned int frame_size) {
   if (latest_packet_time_ms == -1) {
     return;
   }
   int64_t frame_delay;
-  bool not_reordered = inter_frame_delay_->CalculateDelay(
-      timestamp, &frame_delay, latest_packet_time_ms);
   // Filter out frames which have been reordered in time by the network
-  if (not_reordered) {
-    sim_debug("UpdateJitterEstimate, frame_delay=%llu size=%u\n", frame_delay, frame_size);
+  if (inter_frame_delay_->CalculateDelay(timestamp, &frame_delay, latest_packet_time_ms)) {
     // Update the jitter estimate with the new samples
-    jitter_estimate_->UpdateEstimate(frame_delay, frame_size, incomplete_frame);
+    jitter_estimate_->UpdateEstimate(frame_delay, frame_size);
   }
-}
-
-bool VCMJitterBuffer::WaitForRetransmissions() {
-  if (nack_mode_ == kNoNack) {
-    // NACK disabled -> don't wait for retransmissions.
-    return false;
-  }
-  // Evaluate if the RTT is higher than |high_rtt_nack_threshold_ms_|, and in
-  // that case we don't wait for retransmissions.
-  if (high_rtt_nack_threshold_ms_ >= 0 &&
-      rtt_ms_ >= high_rtt_nack_threshold_ms_) {
-    return false;
-  }
-  return true;
 }

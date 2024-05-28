@@ -22,15 +22,12 @@ typedef struct
 	int64_t				alr_started_ts;
 }alr_detector_t;
 
-alr_detector_t*			alr_detector_create();
-void					alr_detector_destroy(alr_detector_t* alr);
+alr_detector_t* alr_detector_create();
+void alr_detector_destroy(alr_detector_t* alr);
 
-void					alr_detector_bytes_sent(alr_detector_t* alr, size_t bytes, int64_t delta_ts);
-void					alr_detector_set_bitrate(alr_detector_t* alr, int bitrate_bps);
+void alr_detector_bytes_sent(alr_detector_t* alr, size_t bytes, int64_t delta_ts);
+void alr_detector_set_bitrate(alr_detector_t* alr, int bitrate_bps);
 
-int64_t					alr_get_app_limited_started_ts(alr_detector_t* alr);
+int64_t alr_get_app_limited_started_ts(alr_detector_t* alr);
 
 #endif
-
-
-

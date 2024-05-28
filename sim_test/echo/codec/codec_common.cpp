@@ -115,7 +115,6 @@ VideoEncoder::VideoEncoder()
 
 	bitrate_kbps_ = h264_resolution_infos[curr_resolution_].max_rate;
 
-	inited_ = false;
 	frame_index_ = 0;
 
 	up_ts_ = GET_SYS_MS();
@@ -123,8 +122,7 @@ VideoEncoder::VideoEncoder()
 
 VideoEncoder::~VideoEncoder()
 {
-	if (inited_)
-		destroy();
+	destroy();
 }
 
 bool VideoEncoder::init(int frame_rate, int src_width, int src_height, int dst_width, int dst_height)
@@ -134,19 +132,16 @@ bool VideoEncoder::init(int frame_rate, int src_width, int src_height, int dst_w
 
 	src_width_ = src_width;
 	src_height_ = src_height;
-
 	frame_rate_ = frame_rate;
-
 	int i;
 	for (i = VIDEO_1080P; i > VIDEO_120P; --i){
 		if (dst_width == resolution_infos[i].codec_width && dst_height == resolution_infos[i].codec_height)
 			break;
 	}
 
-	max_resolution_ = i;
-	curr_resolution_ = max_resolution_;
+	curr_resolution_ = max_resolution_ = i;
 
-	bitrate_kbps_ = (resolution_infos[curr_resolution_].max_rate + resolution_infos[curr_resolution_].min_rate) / 2;
+	bitrate_kbps_ = (resolution_infos[i].max_rate + resolution_infos[i].min_rate) / 2;
 
 	if (!open_encoder())
 		return false;
@@ -165,8 +160,7 @@ void VideoEncoder::destroy()
 	inited_ = false;
 	close_encoder();
 
-	max_resolution_ = VIDEO_480P;
-	curr_resolution_ = VIDEO_480P;
+	curr_resolution_ = max_resolution_ = VIDEO_480P;
 
 	rate_stat_destroy(&rate_stat_);
 }
@@ -214,8 +208,8 @@ void VideoEncoder::try_change_resolution()
 {
 	uint32_t frame_index = (frame_index_ + 1) % (frame_rate_ * KEY_FRAME_SEC);
 	const encoder_resolution_t& res = resolution_infos[curr_resolution_];
+	int64_t now = GET_SYS_MS();
 	if (res.min_rate > bitrate_kbps_ && curr_resolution_ > VIDEO_120P){
-
 		int32_t rate_stat_kps = rate_stat_rate(&rate_stat_, GET_SYS_MS()) / 1000;
 		if (rate_stat_kps < res.min_rate * 7 / 8)
 			return;
@@ -227,10 +221,11 @@ void VideoEncoder::try_change_resolution()
 
 		rate_stat_reset(&rate_stat_);
 
-		up_ts_ = GET_SYS_MS();
-	}
-	else if (frame_index >= (KEY_FRAME_SEC * frame_rate_ / 2) && res.max_rate < bitrate_kbps_ && curr_resolution_ + 1 <= max_resolution_
-		&& up_ts_ + 10000 < GET_SYS_MS()){
+		up_ts_ = now;
+	} else if (frame_index >= (KEY_FRAME_SEC * frame_rate_ / 2) && 
+						 res.max_rate < bitrate_kbps_ && 
+						 curr_resolution_ + 1 <= max_resolution_ && 
+						 up_ts_ + 10000 < now){
 
 		curr_resolution_ = find_resolution(bitrate_kbps_);
 		close_encoder();
@@ -239,7 +234,7 @@ void VideoEncoder::try_change_resolution()
 
 		rate_stat_reset(&rate_stat_);
 
-		up_ts_ = GET_SYS_MS();
+		up_ts_ = now;
 	}
 }
 
@@ -310,7 +305,7 @@ bool VideoDecoder::init(VSampleFormat dst_fmt)
 
 	return true;
 }
-		
+
 void VideoDecoder::destroy()
 {
 	if (!inited_)

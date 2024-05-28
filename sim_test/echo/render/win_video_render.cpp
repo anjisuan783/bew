@@ -475,7 +475,7 @@ void RTCWinVideoRender::OnRenderThread() {
     std::unique_ptr<unsigned char> rgbRotationData(new unsigned char[nRGBBufferSize]);
     bool bD3DInitialed = false;
     while (m_bRending) {
-        /*DWORD dwRes = */WaitForSingleObject(m_hEvent, 200);
+        /*DWORD dwRes = */WaitForSingleObject(m_hEvent, 1500);
         {
             std::lock_guard<std::mutex> lock_guard(m_Lock);
             frame = std::move(m_VideoFrame);

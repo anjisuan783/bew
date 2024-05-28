@@ -15,8 +15,7 @@ VideoViewThread::~VideoViewThread() { }
 void VideoViewThread::set_video_devices(CFVideoRecorder* rec, CFVideoPlayer* player)
 {
 	rec_ = rec;
-	player_ = nullptr;
-	//player_ = player;
+	player_ = player;
 }
 
 void VideoViewThread::run()

@@ -161,10 +161,10 @@ static void test_while()
 
 void test_pacer_queue()
 {
-	//test_pacer_queue_push();
-	//test_pacer_queue_sent();
+	test_pacer_queue_push();
+	test_pacer_queue_sent();
 
-	//test_pacer_queue_front();
+	test_pacer_queue_front();
 	test_while();
 }
 

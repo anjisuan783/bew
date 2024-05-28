@@ -45,9 +45,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>$(IncludePath)</IncludePath>
+    <OutDir>$(SolutionDir)\..\..\bin\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)\..\..\objs\$(Configuration)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(SolutionDir)\..\..\bin\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)\..\..\objs\$(Configuration)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -56,14 +60,14 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WEBRTC_WIN;RTC_WIN;_CRT_SECURE_NO_WARNINGS;WIN32;_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>./baseclasses;./dx;./dshow;./codec/x265;./codec/x265/include;./codec/x264;./codec/x264/include;./codec;../win_log;../../sim_transport;../../estimator;../../common;./ffmpeg/include;libyuv\include;common;.;render/h;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>./baseclasses;./dx;./dshow;./codec;./3rd/include;../win_log;../../sim_transport;../../estimator;../../common;common;.;render/h;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>-DWIN32_LEAN_AND_MEAN %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>d3d9.lib;libyuv.lib;Wldap32.lib;WS2_32.lib;winmm.lib;strmbased.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>./codec/x264/lib;./ffmpeg/lib;./codec/x265/lib;./Debug/lib;3rd/win32/$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>3rd/lib/win32/$(Configuration);$(OutDir)/lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <Midl>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -85,7 +89,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WEBRTC_WIN;RTC_WIN;_CRT_SECURE_NO_WARNINGS;WIN32_LEAN_AND_MEAN;WIN32;_WINDOWS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>./dshow;./dx;./baseclasses;./codec/x265;./codec/x265/include;./codec/x264;./codec/x264/include;./codec;../win_log;../../sim_transport;../../estimator;../../common;./ffmpeg/include;.;render/h;common;libyuv\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>./dshow;./dx;./baseclasses;./codec;../win_log;../../sim_transport;../../estimator;../../common;.;render/h;common;3rd/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -93,9 +97,11 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>./codec/x264/lib;./ffmpeg/lib;./codec/x265/lib;3rd/win32/$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>3rd/lib/win32/$(Configuration);$(OutDir)/lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
       <AdditionalDependencies>d3d9.lib;libyuv.lib;Wldap32.lib;WS2_32.lib;winmm.lib;strmbase.lib</AdditionalDependencies>
+      <ProfileGuidedDatabase>$(intDir)$(TargetName).pgd</ProfileGuidedDatabase>
+      <ProgramDatabaseFile>$(OutDir)\pdb\$(TargetName).pdb</ProgramDatabaseFile>
     </Link>
     <Midl>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -107,13 +113,22 @@
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
+    <Xdcmake>
+      <OutputFile>$(IntDir)$(TargetName).xml</OutputFile>
+    </Xdcmake>
+    <Bscmake>
+      <OutputFile>$(IntDir)$(TargetName).bsc</OutputFile>
+    </Bscmake>
+    <BuildLog>
+      <Path>$(IntDir)/$(ProjectName).log</Path>
+    </BuildLog>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\win_log\audio_log.h" />
     <ClInclude Include="..\win_log\gettimeofday.h" />
     <ClInclude Include="codec\codec_common.h" />
-    <ClInclude Include="codec\x264\echo_h264_decoder.h" />
-    <ClInclude Include="codec\x264\echo_h264_encoder.h" />
+    <ClInclude Include="codec\echo_h264_decoder.h" />
+    <ClInclude Include="codec\echo_h264_encoder.h" />
     <ClInclude Include="dib.h" />
     <ClInclude Include="dshow\DShowCameraPlay.h" />
     <ClInclude Include="dshow\DShowGrabberCB.h" />
@@ -276,18 +291,9 @@
     <ClCompile Include="..\win_log\gettimeofday.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="codec\codec_common.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
-    </ClCompile>
-    <ClCompile Include="codec\x264\echo_h264_decoder.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
-    </ClCompile>
-    <ClCompile Include="codec\x264\echo_h264_encoder.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
-    </ClCompile>
+    <ClCompile Include="codec\codec_common.cpp" />
+    <ClCompile Include="codec\echo_h264_decoder.cpp" />
+    <ClCompile Include="codec\echo_h264_encoder.cpp" />
     <ClCompile Include="dib.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>

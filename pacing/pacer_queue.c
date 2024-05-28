@@ -56,13 +56,11 @@ int pacer_queue_push(pacer_queue_t* que, packet_event_t* ev)
 		val.ptr = packet;
 		skiplist_insert(que->cache, key, val);
 
-		/*将发送的packet按时间顺序压入list*/
 		list_push(que->l, packet);
-		/*增加字节统计*/
+		
 		que->total_size += packet->size;
 		ret = 0;
-	}
-	else{
+	} else {
 		packet = iter->val.ptr;
 		if (packet->sent == 1){ /*有可能包已经被发送了，但是没有删除，这个时候进行重传需要重新成设置未发送标记*/
 			packet->sent = 0;
@@ -85,14 +83,13 @@ packet_event_t*	pacer_queue_front(pacer_queue_t* que)
 	if (skiplist_size(que->cache) == 0)
 		return ret;
 
-	/*取一个未发送的packet*/
 	iter = skiplist_first(que->cache);
 	while(iter != NULL){
 		ret = iter->val.ptr;
 		if (ret->sent == 0)
 			break;
-		else
-			iter = iter->next[0];
+		
+		iter = iter->next[0];
 	}
 
 	return ret;
@@ -103,15 +100,14 @@ void pacer_queue_final(pacer_queue_t* que)
 	packet_event_t* packet;
 	skiplist_item_t key;
 
-	/*删除已经发送的报文*/
+	/*delete the sent packet*/
 	while (que->l->size > 0){
 		packet = list_front(que->l);
 		if (packet->sent == 1){
 			list_pop(que->l);
 			key.u32 = packet->seq;
 			skiplist_remove(que->cache, key);
-		}
-		else
+		} else
 			break;
 	}
 
@@ -120,8 +116,7 @@ void pacer_queue_final(pacer_queue_t* que)
 		skiplist_clear(que->cache);
 		que->total_size = 0;
 		que->oldest_ts = -1;
-	}
-	else{
+	} else {
 		packet = list_front(que->l);
 		que->oldest_ts = packet->que_ts;
 	}
@@ -141,7 +136,7 @@ void pacer_queue_sent_by_id(pacer_queue_t* que, uint32_t id)
 /*删除第一个单元*/
 void pacer_queue_sent(pacer_queue_t* que, packet_event_t* ev)
 {
-	ev->sent = 1;				/*标记为已经发送状态*/
+	ev->sent = 1;				/* set sent flag*/
 
 	if (que->total_size >= ev->size)
 		que->total_size -= ev->size;
@@ -180,15 +175,12 @@ uint32_t pacer_queue_target_bitrate_kbps(pacer_queue_t* que, int64_t now_ts)
 			space = 500;
 		else
 			space = que->max_que_ms - space;
-	}
-	else
+	} else
 		space = que->max_que_ms - 1;
 
 	/*计算缓冲区在500毫秒之内要发送完毕所需的带宽*/
 	if (skiplist_size(que->cache) > 0 && que->total_size > 0)
-		ret = que->total_size * 8 / space;
+		ret = (que->total_size << 3) / space;
 	
 	return ret;
 }
-
-

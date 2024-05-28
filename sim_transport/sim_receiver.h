@@ -13,7 +13,7 @@
 #include "sim_proto.h"
 #include "sim_fec.h"
 
-class VCMJitterBuffer;
+class JitterWrapper;
 
 struct __razor_receiver;
 typedef struct __razor_receiver razor_receiver_t;
@@ -24,10 +24,10 @@ typedef struct __sim_session sim_session_t;
 typedef struct
 {
 	uint32_t		fid;  // frame id
-	uint32_t		last_seq;
+	uint32_t		size;
 	uint32_t		ts;  // frame send ts
 	int					frame_type;  // I P
-	
+	int         nack_count;
 	int					seg_count;   // received segs
 	int					seg_number;  // total segment count of one frame
 	sim_segment_t**		segments;
@@ -42,14 +42,13 @@ typedef struct __sim_frame_cache
 	uint32_t			play_frame_ts; // last playing buffer cleaned ts 
 	uint32_t			max_ts;  // max segment timestamp
 
-	uint32_t			frame_ts;		/* playing ts, update ervery 5ms */
-	uint64_t			play_ts;		/* The timestamp of the current system clock.*/
+	uint32_t			frame_ts;		/* playing ts floodgate, update ervery 5ms */
+	uint64_t			play_ts;		/* for updating frame_ts */
 
 	uint32_t			frame_timer;	/* The interval between frames*/
 	uint32_t			wait_timer;		/* jitter length，unit ms*/
 
 	int					  state;
-	int					  loss_flag;
 
 	float				  f;  // play speed factor 1.0
 
@@ -61,7 +60,7 @@ typedef struct __sim_frame_cache
 typedef struct __sim_receiver
 {
 	uint32_t			base_uid;
-	uint32_t			base_seq;
+	uint32_t			base_seq;      // based segment id for nack
 	uint32_t			max_seq;
 	uint32_t			max_ts;        // max received packet ts
 
@@ -75,7 +74,7 @@ typedef struct __sim_receiver
 	uint64_t			active_ts;
 
 	uint8_t				acked_count;
-	uint32_t			ackeds[ACK_NUM];
+	uint32_t			ackeds[ACK_NUM];  // record received lastest 20 segment ids 
 
 	uint64_t			fir_ts;
 
@@ -92,7 +91,7 @@ typedef struct __sim_receiver
 
 	sim_receiver_fec_t* recover;
 
-	VCMJitterBuffer* jitter;
+	JitterWrapper* jitter;
 } sim_receiver_t;
 
 sim_receiver_t* sim_receiver_create(sim_session_t* s, int transport_type);

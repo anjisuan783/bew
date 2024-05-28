@@ -8,6 +8,7 @@
 #include "sim_sender.h"
 #include "sim_session.h"
 #include "exp_filter.h"
+#include "call_stats.h"
 
 #include <assert.h>
 
@@ -45,8 +46,8 @@ static void sim_bitrate_change(void* trigger, uint32_t bitrate, uint8_t fraction
 
 	s->change_bitrate_cb(s->event, video_bitrate_kbps, loss > 0 ? 1 : 0);
 
-	sim_debug("bitrate = %ukb/s, video_bitrate_kbps = %ukb/s lost = %f fraction_loss=%u\n", 
-			bitrate / 1000, video_bitrate_kbps, loss * 100, fraction_loss);
+	//sim_debug("bitrate = %ukb/s, video_bitrate_kbps = %ukb/s lost = %f fraction_loss=%u\n", 
+	//		bitrate / 1000, video_bitrate_kbps, loss * 100, fraction_loss);
 }
 
 static void sim_send_packet(void* handler, uint32_t send_id, int fec, size_t size, int padding)
@@ -293,8 +294,9 @@ static void sim_sender_fec(sim_session_t* s, sim_sender_t* sender)
 			skiplist_insert(sender->fecs_cache, key, val);
 			fec->send_ts = (uint32_t)(GET_SYS_MS() - sender->first_ts);
 
-      s->fec_bytes += fec->fec_data_size;
-			sender->cc->add_packet(sender->cc, key.u32, 1, fec->fec_data_size + SIM_SEGMENT_HEADER_SIZE);
+			size_t fec_size = fec->fec_data_size + SIM_SEGMENT_HEADER_SIZE;
+      s->fec_bitrate += fec_size;
+			sender->cc->add_packet(sender->cc, key.u32, 1, fec_size);
 		}
 	}
 }
@@ -361,12 +363,12 @@ int sim_sender_put(sim_session_t* s, sim_sender_t* sender, uint8_t payload_type,
 	if (sender->flex != NULL)
 		sim_sender_fec(s, sender);
 
-	//sim_debug("sim_sender_put fid=%u size=%u\n", sender->frame_id_seed, size);
+	sim_debug("sim_sender_put fid=%u size=%u\n", sender->frame_id_seed, size);
 
 	return 0;
 }
 
-// update nack cache
+// remote out of date nack cache item
 static inline void sim_sender_update_base(sim_session_t* s, sim_sender_t* sender, uint32_t base_packet_id)
 {
 	skiplist_iter_t* iter;
@@ -401,7 +403,7 @@ int sim_sender_ack(sim_session_t* s, sim_sender_t* sender, sim_segment_ack_t* ac
 
 	now_ts = GET_SYS_MS();
 
-	// skip heartbeat ack
+	// skip heartbeat ack when calculating rtt
 	if (0 != ack->acked_packet_id) {
 		key.u32 = ack->acked_packet_id;
 		iter = skiplist_search(sender->ack_cache, key);
@@ -434,10 +436,10 @@ int sim_sender_ack(sim_session_t* s, sim_sender_t* sender, sim_segment_ack_t* ac
 		if (iter != NULL){
 			seg = (sim_segment_t*)iter->val.ptr;
 			
-			// 30 < s->rtt / 4 < 200
-			// the time diff betwween sending this seg and sending the first seg + s->rtt/4 > now_ts
+			sim_debug("sim_sender_ack1, nack seq=%u\n", key.u32);
+			// the time diff betwween sending this seg and sending the first seg + s->stats->avg_rtt_ms()/4 > now_ts
 			// the seg hasn't arrived, ignoral nack
-			if (seg->send_ts + sender->first_ts + SU_MIN(200, SU_MAX(30, s->rtt / 4)) > now_ts)
+			if (seg->send_ts + sender->first_ts + (s->stats->avg_rtt_ms()>>1) > now_ts)
 				continue;
 
 			// ignore expired nack request
@@ -445,8 +447,12 @@ int sim_sender_ack(sim_session_t* s, sim_sender_t* sender, sim_segment_ack_t* ac
 				continue;
 
 			// do not processing nack request if rtt >= CACHE_MAX_DELAY, TODO need optimization
-			if (s->rtt < CACHE_MAX_DELAY)
-				sender->cc->add_packet(sender->cc, seg->send_id, 0, seg->data_size + SIM_SEGMENT_HEADER_SIZE);
+			if (s->stats->avg_rtt_ms() < CACHE_MAX_DELAY) {
+				size_t seg_size = seg->data_size + SIM_SEGMENT_HEADER_SIZE;
+				s->nack_bitrate += seg_size;
+				sender->cc->add_packet(sender->cc, seg->send_id, 0, seg_size);
+				sim_debug("sim_sender_ack2, nack seq=%u\n", key.u32);
+			}
 		}
 	}
 
@@ -469,7 +475,7 @@ void sim_sender_feedback(sim_session_t* s, sim_sender_t* sender, sim_feedback_t*
 void sim_sender_update_rtt(sim_session_t* s, sim_sender_t* sender)
 {
 	if (sender->cc != NULL){
-		sender->cc->update_rtt(sender->cc, s->rtt + s->rtt_var);
+		sender->cc->update_rtt(sender->cc, s->stats->avg_rtt_ms());
 	}
 }
 

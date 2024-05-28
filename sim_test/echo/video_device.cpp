@@ -281,7 +281,7 @@ int CFVideoRecorder::read(void* data, uint32_t data_size, int& key_frame, uint8_
 			frame_buf = rgbBuf;
 			src_data = video_data_;
 		}
-		PutVideoData(webrtc::VideoFrame(frame_buf, (webrtc::VideoRotation)kVideoRotation_0, rtc::TimeMicros()));
+		//PutVideoData(webrtc::VideoFrame(frame_buf, (webrtc::VideoRotation)kVideoRotation_0, rtc::TimeMicros()));
 
 		//int64_t begin = rtc::TimeMicros();
 		if (1 && encode_on_){
