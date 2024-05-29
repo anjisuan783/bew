@@ -194,8 +194,3 @@ int64_t sender_cc_get_first_packet_ts(sender_cc_t* cc)
 {
 	return cc->pacer->first_sent_ts;
 }
-
-
-
-
-

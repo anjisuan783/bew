@@ -15,7 +15,7 @@
 #include "exp_filter.h"
 #include "call_stats.h"
 #include "jitter_buffer.h"
-
+#include "sender_congestion_controller.h"
 
 //state
 enum{
@@ -120,9 +120,6 @@ void sim_session_destroy(sim_session_t* s)
 	if (s->stats)
 		delete s->stats;
 
-	//if (s->clock)
-	//	delete s->clock;
-	
 	free(s);
 }
 
@@ -744,16 +741,23 @@ static void sim_session_state_timer(sim_session_t* s, int64_t now_ts, sim_sessio
 		uint32_t cache_delay = 0;
 		uint32_t jitter_ts = 0;
 		uint32_t interval_ts = 0;
+		uint32_t bwe = 0;
 		if (s->receiver) {
 			cache_delay = sim_receiver_cache_delay(s, s->receiver);
 			jitter_ts = s->receiver->cache->wait_timer;
 			interval_ts = s->receiver->cache->frame_timer;
 		}
 
+		if (gcc_transport == s->transport_type) {
+			if (s->sender)
+				bwe = ((sender_cc_t*)(s->sender->cc))->bitrate_controller->last_bitrate_bps;
+		}
+
 		if (s->state_cb != NULL){
 			snprintf(info, SIM_INFO_SIZE,
-				"video=%ukb/s, s=%ukb/s, r=%ukb/s, f=%ukb/s, n=%ukb/s, maxfsize=%uKB, pacer=%u, cache=%u interval=%u, jitter=%u, lost=%.2f, rtt_am=%lld-%lld",
+				"video=%ukb/s, bwe=%ukb/s, s=%ukb/s, r=%ukb/s, f=%ukb/s, n=%ukb/s, maxfsize=%uKB, pacer=%u, cache=%u, interval=%u, jitter=%u, lost=%.2f, rtt_am=%lld-%lld",
 					(uint32_t)(s->video_bytes * 1000 * 8 / delay), 
+					bwe / 1000,
 					(uint32_t)(s->sbitrate * 1000 * 8 / delay), 
 					(uint32_t)(s->rbitrate * 1000 * 8 / delay), 
 					(uint32_t)(s->fec_bitrate * 1000 * 8 / delay), 

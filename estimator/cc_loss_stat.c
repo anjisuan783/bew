@@ -70,7 +70,7 @@ int loss_statistics_calculate(cc_loss_statistics_t* loss_stat, int64_t now_ts, u
 	count = skiplist_size(loss_stat->list);
 	if (disance <= count)
 		*fraction_loss = 0;
-	else{
+	else {
 		*fraction_loss = (disance - count) * 255 / disance;
 	}
 	*num = disance;
@@ -96,6 +96,3 @@ void loss_statistics_incoming(cc_loss_statistics_t* loss_stat, uint16_t seq, int
 
 	loss_evict_oldest(loss_stat, val.i64);
 }
-
-
-

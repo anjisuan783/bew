@@ -671,8 +671,7 @@ static void video_real_ack(sim_session_t* s, sim_receiver_t* r, int heartbeat, u
 	cur_ts = GET_SYS_MS();
 	
 	bool sequence_based = heartbeat == 0;
-	// heartbeat trigger ack every 200ms
-	// packet arriving trigger ack every 20ms
+
 	space_factor = s->stats->max_rtt_ms();
 	if (sequence_based || (r->ack_ts + space_factor < cur_ts)){		
 		ack.acked_packet_id = seq; // calculate rtt using ack on fec mode

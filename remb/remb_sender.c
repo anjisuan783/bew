@@ -16,8 +16,7 @@ static void sender_remb_on_change_bitrate(remb_sender_t* cc, uint32_t bitrate, u
 	bbr_pacer_set_padding_rate(cc->pacer, bitrate / 1000);
 
 	cc->pacer->factor = 1.25f;
-	 
-	/*触发一个通信层通知*/
+
 	if (cc->trigger != NULL && cc->trigger_cb != NULL)
 		cc->trigger_cb(cc->trigger, bitrate, fraction_loss, rtt);
 }

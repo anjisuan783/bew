@@ -60,16 +60,17 @@ void flex_fec_sender_add_segment(flex_fec_sender_t* fec, sim_segment_t* seg)
 		fec->base_id = 0;
 		fec->first = 1;
 		fec->fec_ts = now_ts;
+		//assert(false);
 	}
 
-	// the min seg->packet_id is the fec->base_id
-	if (fec->first == 1)
+	// record the min(seg->packet_id) as the fec->base_id
+	if (fec->first == 1) {
 		fec->base_id = seg->packet_id;
-	else
+		fec->first = 0;
+	} else
 		fec->base_id = SU_MIN(seg->packet_id, fec->base_id);
-
-	fec->first = 0;
 	
+  // extern the fec segments buffer
 	if (fec->segs_count >= fec->seg_size){
 		while(fec->segs_count >= fec->seg_size) {
 			fec->seg_size += DEFAULT_SIZE;

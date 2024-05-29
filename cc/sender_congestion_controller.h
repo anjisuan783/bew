@@ -23,16 +23,16 @@ typedef struct
 	int							was_in_alr;
 	int32_t						rtt;
 
-	delay_base_bwe_t*			bwe;						/*基于延迟的带宽评估器*/
+	delay_base_bwe_t*			bwe;
 	bitrate_controller_t*		bitrate_controller;			/*码率控制器，会根据bwe、ack rate和loss进行综合码率调节*/
 	ack_bitrate_estimator_t*	ack;						/*远端确认收到的数据带宽评估器*/
-	pace_sender_t*				pacer;						/*发送端的步长控制器*/
-	feedback_adapter_t			adapter;					/*处理反馈信息的适配器*/
+	pace_sender_t*				pacer;
+	feedback_adapter_t			adapter;
 
 	bin_stream_t				strm;
 
-	void*						trigger;					/*码率改变后需要通知给通信层的trigger*/
-	bitrate_changed_func		trigger_cb;					/*通知函数*/
+	void*						trigger;					/* bitrate changed trigger*/
+	bitrate_changed_func		trigger_cb;
 
 }sender_cc_t;
 
@@ -41,9 +41,9 @@ void sender_cc_destroy(sender_cc_t* cc);
 
 void sender_cc_heartbeat(sender_cc_t* cc);
 
-/*packet_id是报文序号，相当于RTP的头中的SEQ*/
+/*packet_id == SEQ in rtp*/
 int sender_cc_add_pace_packet(sender_cc_t* cc, uint32_t packet_id, int retrans, size_t size);
-/*这里的seq是transport的自增长ID，即使包重发，这个ID也是不一样的*/
+/* seq is auto increased in transport，no mater it's retransmit or not */
 void sender_on_send_packet(sender_cc_t* cc, uint16_t seq, size_t size);
 
 void sender_on_feedback(sender_cc_t* cc, uint8_t* feedback, int feedback_size);

@@ -24,7 +24,6 @@ remote_bitrate_estimator_t* rbe_create()
 	rbe->last_update_ts = GET_SYS_MS();
 	rbe->last_packet_ts = -1;
 
-	/*初始化带宽统计器*/
 	rbe->last_incoming_bitrate = -1;
 	rate_stat_init(&rbe->incoming_bitrate, k_rate_window_size, k_rate_scale);
 
@@ -66,7 +65,6 @@ void rbe_destroy(remote_bitrate_estimator_t* est)
 	free(est);
 }
 
-/*重置过载评估评估器*/
 static void rbe_reset(remote_bitrate_estimator_t* est)
 {
 	if (est->detector != NULL){
@@ -121,7 +119,6 @@ int rbe_heartbeat(remote_bitrate_estimator_t* est, int64_t now_ts, uint32_t* rem
 		if (est->last_packet_ts > 0 && est->last_packet_ts + k_max_update_timeout > now_ts)
 			rbe_update_estimate(est, now_ts);
 
-		/*进行REMB的发送*/
 		if (rbe_last_estimate(est, &bitrate) == 0){
 			*remb = bitrate;
 			return 0;
@@ -196,4 +193,3 @@ static void rbe_update_estimate(remote_bitrate_estimator_t* est, int64_t now_ts)
 	if (est->aimd->inited == 0)
 		est->interval_ts = aimd_get_feelback_interval(est->aimd);
 }
-

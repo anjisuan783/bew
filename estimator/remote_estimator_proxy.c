@@ -64,7 +64,7 @@ void estimator_proxy_incoming(estimator_proxy_t* proxy, int64_t arrival_ts, uint
 
 	if (proxy->max_arrival_seq <= proxy->wnd_start_seq){
 		num = 0;
-		/*删除过期的到达时间统计，因为UDP会乱序，这里只会删除时间超过500毫秒且是当前报文之前的报文的记录*/
+		/* delete expired records, 500ms before current sequence */
 		SKIPLIST_FOREACH(proxy->arrival_times, iter){
 			if (iter->key.i64 < sequence && arrival_ts >= iter->val.i64 + BACK_WINDOWS_MS && num < MAX_IDS_NUM)
 				ids[num++] = iter->key.i64;
@@ -76,12 +76,12 @@ void estimator_proxy_incoming(estimator_proxy_t* proxy, int64_t arrival_ts, uint
 		}
 	}
 
+	// record the very begining sequence id
 	if (proxy->wnd_start_seq == -1)
 		proxy->wnd_start_seq = seq;
 	else if (sequence < proxy->wnd_start_seq)
 		proxy->wnd_start_seq = sequence;
 
-	/*保存接收到的最大sequence*/
 	proxy->max_arrival_seq = SU_MAX(proxy->max_arrival_seq, sequence);
 
 	key.i64 = sequence;
@@ -94,17 +94,16 @@ static int proxy_bulid_feelback_packet(estimator_proxy_t* proxy, feedback_msg_t*
 	skiplist_iter_t* iter;
 	int64_t new_start_seq = -1;
 
-	if (proxy->max_arrival_seq <= proxy->wnd_start_seq &&  skiplist_size(proxy->arrival_times) > 2)
+	if (proxy->max_arrival_seq <= proxy->wnd_start_seq && skiplist_size(proxy->arrival_times) > 2)
 		return -1;
 	
 	msg->min_ts = -1;
 	msg->samples_num = 0;
 	msg->base_seq = proxy->wnd_start_seq;
 
-	SKIPLIST_FOREACH(proxy->arrival_times, iter){
-
-		if (iter->key.i64 >= proxy->wnd_start_seq){
-			/*找到最早到达的报文时间戳*/
+	SKIPLIST_FOREACH(proxy->arrival_times, iter) {
+		if (iter->key.i64 >= proxy->wnd_start_seq) {
+			/* find the oldest packet */
 			if (msg->min_ts == -1 || msg->min_ts > iter->val.i64)
 				msg->min_ts = iter->val.i64;
 
@@ -138,21 +137,10 @@ int estimator_proxy_heartbeat(estimator_proxy_t* proxy, int64_t cur_ts, feedback
 	return -1;
 }
 
-/*码率发生变化时重新评估发送间隔时间*/
+/* calculate send_interval_ms */
 void estimator_proxy_bitrate_changed(estimator_proxy_t* proxy, uint32_t bitrate)
 {
 	double rate = bitrate * 0.05;
 	proxy->send_interval_ms = (int64_t)((proxy->header_size * 8.0 * 1000.0) / rate + 0.5);
 	proxy->send_interval_ms = SU_MAX(SU_MIN(proxy->send_interval_ms, kMaxSendIntervalMs), kMinSendIntervalMs);
-
 }
-
-
-
-
-
-
-
-
-
-

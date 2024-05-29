@@ -21,7 +21,6 @@ typedef struct
 	int							min_bitrate;
 	int							max_bitrate;
 
-	/*信息反馈函数*/
 	void*						handler;
 	send_feedback_func			send_cb;
 
@@ -31,15 +30,15 @@ typedef struct
 }remb_receiver_t;
 
 
-remb_receiver_t*				remb_receive_create(void* handler, send_feedback_func cb);
-void							remb_receive_destroy(remb_receiver_t* r);
+remb_receiver_t* remb_receive_create(void* handler, send_feedback_func cb);
+void remb_receive_destroy(remb_receiver_t* r);
 
-void							remb_receive_heartbeat(remb_receiver_t* r);
-void							remb_receive_check_acked(remb_receiver_t* r);
-void							remb_receive_on_received(remb_receiver_t* r, uint16_t seq, uint32_t timestamp, size_t size, int remb);
+void remb_receive_heartbeat(remb_receiver_t* r);
+void remb_receive_check_acked(remb_receiver_t* r);
+void remb_receive_on_received(remb_receiver_t* r, uint16_t seq, uint32_t timestamp, size_t size, int remb);
 
-void							remb_receive_update_rtt(remb_receiver_t* r, uint32_t rtt);
-void							remb_receive_set_min_bitrate(remb_receiver_t* r, int min_bitrate);
-void							remb_receive_set_max_bitrate(remb_receiver_t* r, int max_bitrate);
+void remb_receive_update_rtt(remb_receiver_t* r, uint32_t rtt);
+void remb_receive_set_min_bitrate(remb_receiver_t* r, int min_bitrate);
+void remb_receive_set_max_bitrate(remb_receiver_t* r, int max_bitrate);
 
 #endif

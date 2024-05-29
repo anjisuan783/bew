@@ -70,22 +70,19 @@ typedef struct
 	slope_filter_t			slopes;
 }sender_estimation_t;
 
-sender_estimation_t*		sender_estimation_create(uint32_t min_bitrate, uint32_t max_bitrate);
-void						sender_estimation_destroy(sender_estimation_t* estimation);
+sender_estimation_t* sender_estimation_create(uint32_t min_bitrate, uint32_t max_bitrate);
+void sender_estimation_destroy(sender_estimation_t* estimation);
 
-void						sender_estimation_update(sender_estimation_t* estimation, int64_t cur_ts, uint32_t acked_bitrate);
-void						sender_estimation_update_remb(sender_estimation_t* estimation, int64_t cur_ts, uint32_t bitrate);
-void						sender_estimation_update_delay_base(sender_estimation_t* estimation, int64_t cur_ts, uint32_t bitrate, int state);
+void sender_estimation_update(sender_estimation_t* estimation, int64_t cur_ts, uint32_t acked_bitrate);
+void sender_estimation_update_remb(sender_estimation_t* estimation, int64_t cur_ts, uint32_t bitrate);
+void sender_estimation_update_delay_base(sender_estimation_t* estimation, int64_t cur_ts, uint32_t bitrate, int state);
 
-void						sender_estimation_update_block(sender_estimation_t* estimation, uint8_t fraction_loss, uint32_t rtt, int number_of_packets, int64_t cur_ts, uint32_t acked_bitrate);
+void sender_estimation_update_block(sender_estimation_t* estimation, uint8_t fraction_loss, uint32_t rtt, int number_of_packets, int64_t cur_ts, uint32_t acked_bitrate);
 
-void						sender_estimation_set_bitrates(sender_estimation_t* estimation, uint32_t send_bitrate, uint32_t min_bitrate, uint32_t max_bitrate);
-void						sender_estimation_set_send_bitrate(sender_estimation_t* estimation, uint32_t send_bitrate);
-void						sender_estimation_set_minmax_bitrate(sender_estimation_t* estimation, uint32_t min_bitrate, uint32_t max_bitrate);
+void sender_estimation_set_bitrates(sender_estimation_t* estimation, uint32_t send_bitrate, uint32_t min_bitrate, uint32_t max_bitrate);
+void sender_estimation_set_send_bitrate(sender_estimation_t* estimation, uint32_t send_bitrate);
+void sender_estimation_set_minmax_bitrate(sender_estimation_t* estimation, uint32_t min_bitrate, uint32_t max_bitrate);
 
-uint32_t					sender_estimation_get_min_bitrate(sender_estimation_t* estimation);
+uint32_t sender_estimation_get_min_bitrate(sender_estimation_t* estimation);
 
 #endif
-
-
-

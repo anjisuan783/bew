@@ -351,8 +351,7 @@ razor_receiver_t* razor_receiver_create(int type, int min_bitrate, int max_bitra
 		cc->receiver.type = type;
 
 		return (razor_receiver_t *)cc;
-	}
-	else if (type == bbr_congestion){
+	} else if (type == bbr_congestion){
 		bbr = bbr_receive_create(handler, cb);
 		bbr->receiver.heartbeat = razor_bbr_receiver_heartbeat;
 		bbr->receiver.on_received = razor_bbr_receiver_on_received;
@@ -362,8 +361,7 @@ razor_receiver_t* razor_receiver_create(int type, int min_bitrate, int max_bitra
 		bbr->receiver.type = type;
 
 		return (razor_receiver_t *)bbr;
-	}
-	else if (type == remb_congestion){
+	} else if (type == remb_congestion){
 		remb = remb_receive_create(handler, cb);
 		remb->receiver.heartbeat = razor_remb_receiver_heartbeat;
 		remb->receiver.on_received = razor_remb_receiver_on_received;
@@ -379,17 +377,12 @@ razor_receiver_t* razor_receiver_create(int type, int min_bitrate, int max_bitra
 
 void razor_receiver_destroy(razor_receiver_t* receiver)
 {
-	if (receiver != NULL){
-		if (receiver->type == gcc_congestion)
-			receiver_cc_destroy((receiver_cc_t*)receiver);
-		else if (receiver->type == bbr_congestion)
-			bbr_receive_destroy((bbr_receiver_t*)receiver);
-		else
-			remb_receive_destroy((remb_receiver_t*)receiver);
-	}
+	if (receiver == NULL) return ;
+	
+	if (receiver->type == gcc_congestion)
+		receiver_cc_destroy((receiver_cc_t*)receiver);
+	else if (receiver->type == bbr_congestion)
+		bbr_receive_destroy((bbr_receiver_t*)receiver);
+	else
+		remb_receive_destroy((remb_receiver_t*)receiver);
 }
-
-
-
-
-

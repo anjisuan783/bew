@@ -158,7 +158,7 @@ int bitrate_controller_get_parameter(bitrate_controller_t* ctrl, uint32_t* bitra
 	*fraction_loss = ctrl->est->last_fraction_loss;
 	*bitrate = SU_MAX(cur_bitrate, ctrl->est->min_conf_bitrate);
 
-	/*判断网络状态是否发生了改变,发生了改变进行返回*/
+	/* status changed */
 	if (*fraction_loss != ctrl->last_fraction_loss || *rtt != ctrl->last_rtt || *bitrate != ctrl->last_bitrate_bps
 		|| ctrl->last_reserved_bitrate_bps != ctrl->reserved_bitrate_bps){
 
@@ -172,12 +172,3 @@ int bitrate_controller_get_parameter(bitrate_controller_t* ctrl, uint32_t* bitra
 
 	return ret;
 }
-
-
-
-
-
-
-
-
-

@@ -102,10 +102,10 @@ void sender_estimation_update_delay_base(sender_estimation_t* est, int64_t cur_t
 static double slope_filter_update(slope_filter_t* slope, int delta)
 {
 	slope->slope = 255;
-
 	slope->index++;
-	slope->acc -= slope->frags[slope->index % LOSS_WND_SIZE];
-	slope->frags[slope->index % LOSS_WND_SIZE] = delta;
+	int idx = slope->index % LOSS_WND_SIZE;
+	slope->acc -= slope->frags[idx];
+	slope->frags[idx] = delta;
 	slope->acc += delta;
 
 	if (slope->index > LOSS_WND_SIZE)
@@ -116,7 +116,7 @@ static double slope_filter_update(slope_filter_t* slope, int delta)
 	return slope->slope;
 }
 
-/*更新接收端汇报的丢包延迟数据*/
+/* update loss rate base on receiver report */
 void sender_estimation_update_block(sender_estimation_t* est, uint8_t fraction_loss, uint32_t rtt, int number_of_packets, int64_t cur_ts, uint32_t acked_bitrate)
 {
 	int lost_packets_Q8;
@@ -136,7 +136,6 @@ void sender_estimation_update_block(sender_estimation_t* est, uint8_t fraction_l
 		if (est->expected_packets_since_last_loss_update < k_limit_num_packets)
 			return;
 
-		/*计算丢包率，这里采用大于20个报文的采用作为计算依据*/
 		est->has_decreased_since_last_fraction_loss = -1;
 		est->last_fraction_loss = est->lost_packets_since_last_loss_update_Q8 / est->expected_packets_since_last_loss_update;
 

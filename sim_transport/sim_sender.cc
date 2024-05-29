@@ -15,6 +15,8 @@
 #define MAX_SEND_COUNT		10
 #define DEFAULT_SPLITS_SIZE 128
 
+#define MAX_PACE_QUEUE_DELAY 1000
+
 static void sim_bitrate_change(void* trigger, uint32_t bitrate, uint8_t fraction_loss, uint32_t rtt)
 {
 	sim_session_t* s = (sim_session_t*)trigger;
@@ -138,7 +140,7 @@ sim_sender_t* sim_sender_create(sim_session_t* s, int transport_type, int paddin
 	if (cc_type < gcc_transport || cc_type > remb_transport)
 		cc_type = gcc_congestion;
 
-	sender->cc = razor_sender_create(cc_type, padding, s, sim_bitrate_change, sender, sim_send_packet, 1000);
+	sender->cc = razor_sender_create(cc_type, padding, s, sim_bitrate_change, sender, sim_send_packet, MAX_PACE_QUEUE_DELAY);
 
 	sender->s = s;
 
@@ -196,7 +198,6 @@ void sim_sender_destroy(sim_session_t* s, sim_sender_t* sender)
 	free(sender);
 }
 
-#define MAX_PACE_QUEUE_DELAY 300
 void sim_sender_reset(sim_session_t* s, sim_sender_t* sender, int transport_type, int padding, int fec)
 {
 	int cc_type;
@@ -245,7 +246,7 @@ int sim_sender_active(sim_session_t* s, sim_sender_t* sender)
 	return 0;
 }
 
-static uint16_t sim_split_frame(sim_session_t* s, sim_sender_t* sender, size_t size, int segment_size)
+static uint16_t sim_split_frame(sim_sender_t* sender, size_t size, int segment_size)
 {
 	uint32_t ret, i;
 	uint16_t remain_size, packet_size;
@@ -253,25 +254,25 @@ static uint16_t sim_split_frame(sim_session_t* s, sim_sender_t* sender, size_t s
 	if (size <= segment_size){
 		ret = 1;
 		sender->splits[0] = size;
-	} else {
-		ret = (size + segment_size - 1) / segment_size;
-		if (ret > sender->splits_size){
-			while (ret > sender->splits_size)
-				sender->splits_size *= 2;
-			sender->splits = (uint16_t*)realloc(sender->splits, sender->splits_size * sizeof(uint16_t));
-		}
-		packet_size = size / ret;
-		remain_size = size % ret;
-
-		for (i = 0; i < ret; i++){
-			if (remain_size > 0){
-				sender->splits[i] = packet_size + 1;
-				remain_size--;
-			} else
-				sender->splits[i] = packet_size;
-		}
+		return ret;
 	}
+	ret = (size + segment_size - 1) / segment_size;
+	if (ret > sender->splits_size){
+		while (ret > sender->splits_size) {
+			sender->splits_size <<= 1;
+		}
+		sender->splits = (uint16_t*)realloc(sender->splits, sender->splits_size * sizeof(uint16_t));
+	}
+	packet_size = size / ret;
+	remain_size = size % ret;
 
+	for (i = 0; i < ret; i++){
+		if (remain_size > 0){
+			sender->splits[i] = packet_size + 1;
+			remain_size--;
+		} else
+			sender->splits[i] = packet_size;
+	}
 	return ret;
 }
 
@@ -308,7 +309,7 @@ int sim_sender_put(sim_session_t* s, sim_sender_t* sender, uint8_t payload_type,
 
 	int64_t now_ts = GET_SYS_MS();
 	const int segment_size = SIM_VIDEO_SIZE;
-	const uint16_t total = sim_split_frame(s, sender, size, segment_size);
+	const uint16_t total = sim_split_frame(sender, size, segment_size);
 
 	uint32_t timestamp;  // calculate relevant send timestamp
 	if (sender->first_ts == -1){
@@ -357,6 +358,7 @@ int sim_sender_put(sim_session_t* s, sim_sender_t* sender, uint8_t payload_type,
 
 		sender->cc->add_packet(sender->cc, seg->send_id, 0, seg->data_size + SIM_SEGMENT_HEADER_SIZE);
 
+		// TODO (judge this using loss rate)
 		if (sender->flex != NULL && sender->flex->segs_count >= 100)
 			sim_sender_fec(s, sender);
 	}
@@ -410,11 +412,9 @@ int sim_sender_ack(sim_session_t* s, sim_sender_t* sender, sim_segment_ack_t* ac
 		if (iter != NULL) {
 			seg = (sim_segment_t*)iter->val.ptr;
 			
-			int64_t seg_send_ts = sender->first_ts + seg->timestamp + seg->send_ts;
-			// calculate rtt using ack
-			if (seg_send_ts <= now_ts) { 
-				uint32_t diff = (uint32_t)(now_ts - seg_send_ts);
-				//sim_debug("sim_sender_ack id=%u timestamp=%u, send_ts=%u, diff=%u\n", seg->packet_id, seg->timestamp, seg->send_ts, diff);
+			// calcute rtt
+			int64_t diff = now_ts - (sender->first_ts + seg->timestamp + seg->send_ts);
+			if (diff >= 0) { 
 				sim_session_calculate_rtt(s, (uint32_t)(diff), now_ts);
 			}
 		}

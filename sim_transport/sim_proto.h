@@ -79,7 +79,7 @@ typedef struct
 {
 	uint32_t	packet_id;		  /* sequence id excluding fec packets */
 	uint32_t	fid;					  /* frame id, start from 1 */
-	uint32_t	timestamp;			/* the time when split segments, value = now - sender->first_ts */
+	uint32_t	timestamp;			/* the time when the session get data, value = now - sender->first_ts */
 	uint16_t	index;					/* segment id within one frame, start from 0 */
 	uint16_t	total;					/* total splited packets of one frame */
 	uint8_t		ftype;					/* frame type, 1 for key, 0 for delta */
@@ -87,7 +87,7 @@ typedef struct
 
 	uint8_t		remb;					  /* use remb */
 	uint16_t	fec_id;					/* fec object id, flex_fec_sender_t.fec_id */
-	uint16_t	send_ts;				/* the time when sending the seg, d-value relevant to seg->timestamp, also update by resend*/
+	uint16_t	send_ts;				/* relevant to the time from seg->timestamp to sending the seg to network, also updated by resend*/
 	uint16_t	transport_seq;	/* sequence */
 	
 	uint32_t	send_id;        /* sequence id include fec packets */
